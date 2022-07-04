@@ -1469,6 +1469,37 @@ static void clear_narrow_holds(const ip_selector *our_client,
 	}
 }
 
+static bool delete_bare_shunt_kernel_policy(const struct bare_shunt *bsp,
+					    const char *why,
+					    struct logger *logger)
+{
+	/* this strips the port (but why?) */
+	const struct ip_protocol *transport_proto = protocol_by_ipproto(bsp->transport_proto);
+	ip_address src_address = selector_prefix(bsp->our_client);
+	ip_address dst_address = selector_prefix(bsp->peer_client);
+	ip_selector src = selector_from_address_protocol(src_address, transport_proto);
+	ip_selector dst = selector_from_address_protocol(dst_address, transport_proto);
+	const struct ip_info *afi = address_type(&src_address);
+	pexpect(afi == address_type(&dst_address));
+	const ip_address null_host = afi->address.any;
+	ipsec_spi_t cur_shunt_spi = ntohl(bsp->said.spi);
+	selectors_buf sb;
+	dbg("kernel: deleting bare shunt %s from kernel for %s",
+	    str_selectors(&src, &dst, &sb), why);
+	/* assume low code logged action */
+	return raw_policy(KP_DELETE_OUTBOUND,
+			  &null_host, &src, &null_host, &dst,
+			  htonl(cur_shunt_spi), htonl(SPI_PASS),
+			  transport_proto->ipproto,
+			  ET_INT, esp_transport_proto_info,
+			  deltatime(SHUNT_PATIENCE),
+			  0, /* we don't know connection for priority yet */
+			  NULL, /* sa_marks */
+			  0 /* xfrm interface id */,
+			  null_shunk, logger,
+			  "%s() %s", __func__, why);
+}
+
 bool delete_bare_shunt(const ip_address *src_address,
 		       const ip_address *dst_address,
 		       int transport_proto, ipsec_spi_t cur_shunt_spi,
@@ -3673,19 +3704,14 @@ static void expire_bare_shunts(struct logger *logger, bool all)
 						     "trap shunt install failed ");
 					}
 				}
+			} else {
+				if (!delete_bare_shunt_kernel_policy(bsp,
+								     "expire_bare_shunts()", logger)) {
+					llog(RC_LOG_SERIOUS, logger,
+					     "failed to delete bare shunt");
+				}
 			}
-			ip_address our_addr = selector_prefix(bsp->our_client);
-			ip_address peer_addr = selector_prefix(bsp->peer_client);
-			bool skip_xfrm_policy_delete = co_serial_is_set(bsp->from_serialno);
-			if (!delete_bare_shunt(&our_addr, &peer_addr,
-					       bsp->transport_proto,
-					       ntohl(bsp->said.spi),
-					       skip_xfrm_policy_delete,
-					       "expire_bare_shunts()", logger)) {
-				llog(RC_LOG_SERIOUS, logger,
-					    "failed to delete bare shunt");
-			}
-			passert(bsp != *bspp);
+			free_bare_shunt(bspp);
 		} else {
 			dbg_bare_shunt("keeping recent", bsp);
 			bspp = &bsp->next;
