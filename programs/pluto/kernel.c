@@ -3684,14 +3684,14 @@ bool orphan_holdpass(const struct connection *c, struct spd_route *sr,
 	return true;
 }
 
-static void expire_bare_shunts(struct logger *logger, bool all)
+static void expire_bare_shunts(struct logger *logger)
 {
 	dbg("kernel: checking for aged bare shunts from shunt table to expire");
 	for (struct bare_shunt **bspp = &bare_shunts; *bspp != NULL; ) {
 		struct bare_shunt *bsp = *bspp;
 		time_t age = deltasecs(monotimediff(mononow(), bsp->last_activity));
 
-		if (age > deltasecs(pluto_shunt_lifetime) || all) {
+		if (age > deltasecs(pluto_shunt_lifetime)) {
 			dbg_bare_shunt("expiring old", bsp);
 			if (co_serial_is_set(bsp->from_serialno)) {
 				struct connection *c = connection_by_serialno(bsp->from_serialno);
@@ -3719,15 +3719,30 @@ static void expire_bare_shunts(struct logger *logger, bool all)
 	}
 }
 
+static void delete_bare_shunts(struct logger *logger)
+{
+	dbg("kernel: emptying bare shunt table");
+	while (bare_shunts != NULL) { /* nothing left */
+		const struct bare_shunt *bsp = bare_shunts;
+		if (!delete_bare_shunt_kernel_policy(bsp,
+						     __func__, logger)) {
+			llog(RC_LOG_SERIOUS, logger,
+			     "failed to delete bare shunt's kernel policy"); /* big oops */
+		}
+		free_bare_shunt(&bare_shunts); /* also updates BARE_SHUNTS */
+	}
+}
+
 static void kernel_scan_shunts(struct logger *logger)
 {
-	expire_bare_shunts(logger, false/*not-all*/);
+	expire_bare_shunts(logger);
 }
 
 void shutdown_kernel(struct logger *logger)
 {
 
-	if (kernel_ops->shutdown != NULL)
+	if (kernel_ops->shutdown != NULL) {
 		kernel_ops->shutdown(logger);
-	expire_bare_shunts(logger, true/*all*/);
+	}
+	delete_bare_shunts(logger);
 }
