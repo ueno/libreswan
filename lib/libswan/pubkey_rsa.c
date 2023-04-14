@@ -501,9 +501,33 @@ static struct hash_signature RSA_sign_hash_pkcs1_1_5_rsa(const struct secret_stu
 	 * used to generate the signature.
 	 */
 	SECItem signature_result = {0};
+
+	/* ignore system crypto-policies for the hash algorithm */
+	PRUint32 saved_policy;
+
+	if (NSS_GetAlgorithmPolicy(hash_algo->nss.oid_tag, &saved_policy) != SECSuccess) {
+		/* PR_GetError() returns the thread-local error */
+		enum_buf tb;
+		llog_nss_error(RC_LOG_SERIOUS, logger,
+			       "NSS_SetAlgorithmPolicy(%s) function failed",
+			       str_nss_oid(hash_algo->nss.oid_tag, &tb));
+		return (struct hash_signature) { .len = 0, };
+	}
+
+	if (!(saved_policy & NSS_USE_ALG_IN_SIGNATURE)) {
+		(void)NSS_SetAlgorithmPolicy(hash_algo->nss.oid_tag,
+					     NSS_USE_ALG_IN_SIGNATURE, 0);
+	}
+
 	SECStatus s = SGN_Digest(pks->u.pubkey.private_key,
 				 hash_algo->nss.oid_tag,
 				 &signature_result, &digest);
+
+	if (!(saved_policy & NSS_USE_ALG_IN_SIGNATURE)) {
+		(void)NSS_SetAlgorithmPolicy(hash_algo->nss.oid_tag,
+					     saved_policy, ~saved_policy);
+	}
+
 	if (s != SECSuccess) {
 		/* PR_GetError() returns the thread-local error */
 		enum_buf tb;
