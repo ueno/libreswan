@@ -464,7 +464,7 @@ void connection_check_phase2(struct logger *logger)
 		if (p1st != NULL) {
 			/* arrange to rekey the phase 1, if there was one. */
 			if (c->config->dnshostname != NULL) {
-				restart_connections_by_peer(c, logger);
+				restart_connections_by_peer(c, false, logger);
 			} else {
 				event_force(EVENT_SA_REPLACE, p1st);
 			}

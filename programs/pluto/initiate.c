@@ -443,7 +443,7 @@ static bool same_in_some_sense(const struct connection *a,
 			 b->config->dnshostname, &b->remote->host.addr);
 }
 
-void restart_connections_by_peer(struct connection *const c, struct logger *logger)
+void restart_connections_by_peer(struct connection *const c, bool force, struct logger *logger)
 {
 	/*
 	 * If c is a CK_INSTANCE, it will be removed by terminate_connection.
@@ -471,7 +471,7 @@ void restart_connections_by_peer(struct connection *const c, struct logger *logg
 			      d->config->dnshostname, &d->remote->host.addr)) {
 			/* This might delete c if CK_INSTANCE */
 			/* ??? is there a chance hp becomes dangling? */
-			terminate_connections_by_name(d->name, /*quiet?*/false, logger);
+			terminate_connections_by_name(d->name, /*quiet?*/false, force, logger);
 		}
 		d = next;
 	}

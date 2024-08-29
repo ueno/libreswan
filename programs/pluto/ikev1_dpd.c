@@ -118,7 +118,7 @@ void event_v1_dpd_timeout(struct state *tbd_st)
 	case DPD_ACTION_RESTART:
 		llog(RC_LOG, logger,
 		     "DPD action - restarting all connections that share this peer");
-		restart_connections_by_peer(c, logger);
+		restart_connections_by_peer(c, true, logger);
 		break;
 
 	case DPD_ACTION_HOLD:

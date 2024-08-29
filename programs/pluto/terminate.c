@@ -60,8 +60,10 @@
 
 #include "host_pair.h"
 
-static int terminate_a_connection(struct connection *c, void *unused_arg UNUSED, struct logger *logger)
+static int terminate_a_connection(struct connection *c, void *arg, struct logger *logger)
 {
+	bool force = *(bool *)arg;
+
 	/* XXX: something better? */
 	fd_delref(&c->logger->global_whackfd);
 	c->logger->global_whackfd = fd_addref(logger->global_whackfd);
@@ -73,14 +75,20 @@ static int terminate_a_connection(struct connection *c, void *unused_arg UNUSED,
 	flush_pending_by_connection(c);
 
 	if (shared_phase1_connection(c)) {
-		llog(RC_LOG, c->logger,
-		     "IKE SA is shared - only terminating IPsec SA");
-		if (c->newest_ipsec_sa != SOS_NOBODY) {
-			struct state *st = state_by_serialno(c->newest_ipsec_sa);
-			/* XXX: something better? */
-			fd_delref(&st->st_logger->global_whackfd);
-			st->st_logger->global_whackfd = fd_addref(logger->global_whackfd);
-			delete_state(st);
+		if (force) {
+			llog(RC_LOG, c->logger,
+			     "IKE SA is shared - terminating IKE and IPsec SA anyway");
+			delete_states_by_connection(&c);
+		} else {
+			llog(RC_LOG, c->logger,
+			     "IKE SA is shared - only terminating IPsec SA");
+			if (c->newest_ipsec_sa != SOS_NOBODY) {
+				struct state *st = state_by_serialno(c->newest_ipsec_sa);
+				/* XXX: something better? */
+				fd_delref(&st->st_logger->global_whackfd);
+				st->st_logger->global_whackfd = fd_addref(logger->global_whackfd);
+				delete_state(st);
+			}
 		}
 	} else {
 		/*
@@ -99,7 +107,7 @@ static int terminate_a_connection(struct connection *c, void *unused_arg UNUSED,
 	return 1;
 }
 
-void terminate_connections_by_name(const char *name, bool quiet, struct logger *logger)
+void terminate_connections_by_name(const char *name, bool quiet, bool force, struct logger *logger)
 {
 	/*
 	 * Loop because more than one may match (template and
@@ -108,12 +116,12 @@ void terminate_connections_by_name(const char *name, bool quiet, struct logger *
 	 * checked aliases
 	 */
 
-	if (foreach_concrete_connection_by_name(name, terminate_a_connection, NULL, logger) >= 0) {
+	if (foreach_concrete_connection_by_name(name, terminate_a_connection, &force, logger) >= 0) {
 		/* logged by terminate_a_connection() */
 		return;
 	}
 
-	int count = foreach_connection_by_alias(name, terminate_a_connection, NULL, logger);
+	int count = foreach_connection_by_alias(name, terminate_a_connection, &force, logger);
 	if (count == 0) {
 		if (!quiet)
 			llog(RC_UNKNOWN_NAME, logger,

@@ -564,10 +564,10 @@ struct whack_message;   /* forward declaration of tag whack_msg */
 extern void add_connection(const struct whack_message *wm, struct logger *logger);
 
 void update_ends_from_this_host_addr(struct end *this, struct end *that);
-extern void restart_connections_by_peer(struct connection *c, struct logger *logger);
+extern void restart_connections_by_peer(struct connection *c, bool force, struct logger *logger);
 extern void flush_revival(const struct connection *c);
 
-extern void terminate_connections_by_name(const char *name, bool quiet, struct logger *logger);
+extern void terminate_connections_by_name(const char *name, bool quiet, bool force, struct logger *logger);
 extern void release_connection(struct connection *c);
 extern void delete_connection(struct connection **cp);
 extern void delete_connections_by_name(const char *name, bool strict, struct logger *logger);

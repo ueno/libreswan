@@ -227,7 +227,7 @@ bool orient(struct connection *c, struct logger *logger)
 			     "both sides of "PRI_CONNECTION" are our interface %s!",
 			     pri_connection(c, &cib),
 			     ifp->ip_dev->id_rname);
-			terminate_connections_by_name(c->name, /*quiet?*/false, logger);
+			terminate_connections_by_name(c->name, /*quiet?*/false, /*force?*/false, logger);
 			return false;
 		}
 
@@ -269,7 +269,7 @@ bool orient(struct connection *c, struct logger *logger)
 				     ifp->ip_dev->id_rname,
 				     str_address(&ifp->ip_dev->id_address, &ifpb));
 			}
-			terminate_connections_by_name(c->name, /*quiet?*/false, logger);
+			terminate_connections_by_name(c->name, /*quiet?*/false, /*force?*/false, logger);
 			return false;
 		}
 

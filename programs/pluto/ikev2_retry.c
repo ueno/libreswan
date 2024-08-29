@@ -81,7 +81,7 @@ static void retransmit_timeout_action(struct ike_sa *ike)
 		struct logger *logger = clone_logger(ike->sa.st_logger, HERE);
 		struct connection *c = ike->sa.st_connection;
 		ike = NULL;
-		restart_connections_by_peer(c, logger);
+		restart_connections_by_peer(c, false, logger);
 		ike = NULL; /* potentially deleted */
 		free_logger(&logger, HERE);
 		break;

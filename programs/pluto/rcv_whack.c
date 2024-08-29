@@ -540,7 +540,7 @@ static void whack_process(const struct whack_message *const m, struct show *s)
 			whack_log(RC_FATAL, whackfd,
 				  "received whack command to delete a connection, but did not receive the connection name - ignored");
 		} else {
-			terminate_connections_by_name(m->name, /*quiet?*/true, logger);
+			terminate_connections_by_name(m->name, /*quiet?*/true, /*force?*/false, logger);
 			delete_connections_by_name(m->name, !m->whack_connection, logger);
 		}
 		dbg_whack(s, "stop: delete '%s'", m->name == NULL ? "NULL" : m->name);
@@ -879,7 +879,7 @@ static void whack_process(const struct whack_message *const m, struct show *s)
 	if (m->whack_terminate) {
 		dbg_whack(s, "start: terminate");
 		passert(m->name != NULL);
-		terminate_connections_by_name(m->name, /*quiet?*/true, logger);
+		terminate_connections_by_name(m->name, /*quiet?*/true, /*force?*/false, logger);
 		dbg_whack(s, "stop: terminate");
 	}
 
