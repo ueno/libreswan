@@ -98,6 +98,7 @@
 #include "rekeyfuzz.h"
 #include "ikev2_ike_sa_init.h"		/* for initiate_v2_IKE_SA_INIT_request() */
 #include "ikev2_states.h"
+#include "ikev2_ike_intermediate.h" /* for calc_v2_ike_intermediate_keymat */
 
 bool accept_v2_nonce(struct logger *logger, struct msg_digest *md,
 		     chunk_t *dest, const char *name)
@@ -451,34 +452,6 @@ void schedule_v2_replace_event(struct state *st)
 	 */
 	event_schedule(kind, lifetime, st);
 	pexpect(st_v2_lifetime_event(st)->ev_type == kind);
-}
-
-static bool calc_v2_ike_intermediate_keymat(struct ike_sa *ike,
-					    const ike_spis_t *new_ike_spis,
-					    where_t where)
-{
-	struct logger *logger = ike->sa.logger;
-	PK11SymKey *shared = ike->sa.st_dh_shared_secret;
-
-	const struct prf_desc *old_prf = ike->sa.st_oakley.ta_prf;
-	PK11SymKey *old_d = ike->sa.st_skey_d_nss;
-	ldbg(logger, "%s() calculating skeyseed using prf %s",
-	     __func__, old_prf->common.fqn);
-
-	PK11SymKey *skeyseed =
-		ikev2_ike_sa_rekey_skeyseed(old_prf, old_d,
-					    shared,
-					    ike->sa.st_ni,
-					    ike->sa.st_nr,
-					    logger);
-	if (skeyseed == NULL) {
-		llog_pexpect(logger, where, "rekey SKEYSEED failed");
-		return false;
-	}
-
-	calc_v2_ike_keymat(&ike->sa, skeyseed, new_ike_spis);
-	symkey_delref(logger, "skeyseed", &skeyseed);
-	return true;
 }
 
 static stf_status process_v2_request_no_skeyseed_continue(struct state *ike_st,

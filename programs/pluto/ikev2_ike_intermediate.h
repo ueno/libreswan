@@ -16,6 +16,12 @@
 #ifndef IKEV2_IKE_INTERMEDIATE_H
 #define IKEV2_IKE_INTERMEDIATE_H
 
+const struct dh_desc *next_additional_ke_desc(struct ike_sa *ike);
+
+bool calc_v2_ike_intermediate_keymat(struct ike_sa *ike,
+				     const ike_spis_t *new_ike_spis,
+				     where_t where);
+
 extern const struct v2_exchange v2_IKE_INTERMEDIATE_exchange;
 
 #endif

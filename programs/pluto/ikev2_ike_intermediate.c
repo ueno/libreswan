@@ -25,6 +25,7 @@
 #include "ikev2_send.h"
 #include "ikev2_message.h"
 #include "ikev2_ppk.h"
+#include "ikev2_parent.h"
 #include "ikev2_ike_intermediate.h"
 #include "crypt_symkey.h"
 #include "log.h"
@@ -33,6 +34,7 @@
 #include "ikev2_nat.h"
 #include "ikev2_ike_auth.h"
 #include "pluto_stats.h"
+#include "crypt_ke.h"
 #include "crypt_prf.h"
 #include "ikev2_states.h"
 #include "ikev2_eap.h"
@@ -40,9 +42,18 @@
 #include "crypt_cipher.h"
 #include "ikev2_prf.h"
 #include "ikev2_notification.h"
+#include "ike_alg_dh.h"			/* for ike_alg_dh_none */
 
+static ke_and_nonce_cb initiate_v2_IKE_INTERMEDIATE_request_continue; /* type assertion */
+static ke_and_nonce_cb process_v2_IKE_INTERMEDIATE_request_continue; /* type assertion */
 static dh_shared_secret_cb process_v2_IKE_INTERMEDIATE_response_continue;	/* type assertion */
 static ikev2_state_transition_fn process_v2_IKE_INTERMEDIATE_request;	/* type assertion */
+
+static stf_status record_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
+						     struct dh_local_secret *local_secret);
+static stf_status record_v2_IKE_INTEMEDIATE_response(struct ike_sa *ike,
+						     struct msg_digest *md,
+						     struct dh_local_secret *local_secret);
 
 /*
  * Without this the code makes little sense.
@@ -235,6 +246,16 @@ static chunk_t calc_ppk_confirmation(const struct prf_desc *prf_desc,
 	return ret;
 }
 
+const struct dh_desc *next_additional_ke_desc(struct ike_sa *ike)
+{
+	unsigned ke_index = ike->sa.st_v2_ike_intermediate.ke_index;
+	if (ke_index < elemsof(ike->sa.st_oakley.ta_addke) &&
+	    ike->sa.st_oakley.ta_addke[ke_index].group) {
+		return  ike->sa.st_oakley.ta_addke[ke_index].group;
+	}
+	return NULL;
+}
+
 static stf_status initiate_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
 						       struct child_sa *null_child,
 						       struct msg_digest *null_md)
@@ -245,8 +266,22 @@ static stf_status initiate_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
 	dbg("%s() for #%lu %s: g^{xy} calculated, sending INTERMEDIATE",
 	    __func__, ike->sa.st_serialno, ike->sa.st_state->name);
 
-	/* beginning of data going out */
+	const struct dh_desc *group = next_additional_ke_desc(ike);
+	if (group != NULL) {
+		submit_ke_and_nonce(/*callback*/&ike->sa, /*task*/&ike->sa, /*no-md*/NULL,
+				    group,
+				    initiate_v2_IKE_INTERMEDIATE_request_continue,
+				    /*detach_whack*/false, HERE);
 
+		return STF_SUSPEND;
+	} else {
+		return record_v2_IKE_INTERMEDIATE_request(ike, NULL);
+	}
+}
+
+static stf_status record_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
+						     struct dh_local_secret *local_secret)
+{
 	struct v2_message request;
 	if (!open_v2_message("intermediate exchange request",
 			     ike, ike->sa.logger,
@@ -338,6 +373,15 @@ static stf_status initiate_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
 					"failed to find PPK and PPK_ID, continuing without PPK");
 			}
 		}
+	} else if (local_secret) {
+		/* Send additional KE; FIXME should it also work with PPK? */
+		dbg("HACK: blow away old shared secret as going to re-compute it");
+		dh_local_secret_delref(&ike->sa.st_dh_local_secret, HERE);
+		unpack_KE_from_helper(&ike->sa, local_secret, &ike->sa.st_gi);
+		const struct dh_desc *group = next_additional_ke_desc(ike);
+		if (!emit_v2KE(ike->sa.st_gi, group, request.pbs)) {
+			return STF_INTERNAL_ERROR;
+		}
 	}
 
 	if (!close_v2_message(&request)) {
@@ -360,8 +404,18 @@ static stf_status initiate_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
 	}
 
 	record_v2_message(&request.message, request.story, request.outgoing_fragments);
+	return true;
+}
 
-	return STF_OK;
+stf_status initiate_v2_IKE_INTERMEDIATE_request_continue(struct state *ike_st,
+							 struct msg_digest *md UNUSED,
+							 struct dh_local_secret *local_secret,
+							 chunk_t *nonce UNUSED)
+{
+	struct ike_sa *ike = pexpect_ike_sa(ike_st);
+	pexpect(ike->sa.st_sa_role == SA_INITIATOR);
+
+	return record_v2_IKE_INTERMEDIATE_request(ike, local_secret) ? STF_OK : STF_INTERNAL_ERROR;
 }
 
 static bool recalc_v2_ppk_interm_keymat(struct ike_sa *ike,
@@ -452,10 +506,28 @@ stf_status process_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
 	 */
 	update_st_ike_spis_responder(ike, &md->hdr.isa_ike_responder_spi);
 
-	/* send Intermediate Exchange response packet */
+	const struct dh_desc *group = next_additional_ke_desc(ike);
+	if (group != NULL) {
+		if (!v2_accept_ke_for_proposal(ike, &ike->sa, md, group, ENCRYPTED_PAYLOAD)) {
+			return STF_FATAL;
+		}
 
-	/* beginning of data going out */
+		/* calculate the nonce and the KE */
+		submit_ke_and_nonce(/*callback*/&ike->sa, /*task*/&ike->sa, md, group,
+				    process_v2_IKE_INTERMEDIATE_request_continue,
+				    /*detach_whack*/false, HERE);
 
+		return STF_SUSPEND;
+	} else {
+		dbg("Not calculating the nonce and the KE");
+		return record_v2_IKE_INTEMEDIATE_response(ike, md, NULL) ? STF_OK : STF_INTERNAL_ERROR;
+	}
+}
+
+static stf_status record_v2_IKE_INTEMEDIATE_response(struct ike_sa *ike,
+					       struct msg_digest *md,
+					       struct dh_local_secret *local_secret)
+{
 	struct v2_message response;
 	if (!open_v2_message("intermediate exchange response",
 			     ike, ike->sa.logger,
@@ -525,6 +597,13 @@ stf_status process_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
 					"failed to find a matching PPK, continuing without PPK");
 			}
 		}
+	} else if (local_secret) {
+		dbg("HACK: blow away old shared secret as going to re-compute it");
+		dh_local_secret_delref(&ike->sa.st_dh_local_secret, HERE);
+		unpack_KE_from_helper(&ike->sa, local_secret, &ike->sa.st_gr);
+		if (!emit_v2KE(ike->sa.st_gr, dh_local_secret_desc(local_secret), response.pbs)) {
+			return STF_INTERNAL_ERROR;
+		}
 	}
 
 	if (!close_v2_message(&response)) {
@@ -554,9 +633,27 @@ stf_status process_v2_IKE_INTERMEDIATE_request(struct ike_sa *ike,
 					    HERE);
 		llog(RC_LOG, ike->sa.logger,
 		     "PPK used in IKE_INTERMEDIATE as responder");
+	} else if (local_secret) {
+		/* trigger recalculating keymat */
+		dbg("HACK: blow away old shared secret as going to re-compute it");
+		symkey_delref(ike->sa.logger, "st_dh_shared_secret", &ike->sa.st_dh_shared_secret);
+		ike->sa.hidden_variables.st_skeyid_calculated = false;
+	} else {
+		dbg("Not re-computing the keymat");
 	}
 
 	return STF_OK;
+}
+
+static stf_status process_v2_IKE_INTERMEDIATE_request_continue(struct state *ike_st,
+							       struct msg_digest *md,
+							       struct dh_local_secret *local_secret,
+							       chunk_t *nonce UNUSED)
+{
+	struct ike_sa *ike = pexpect_ike_sa(ike_st);
+	pexpect(ike->sa.st_sa_role == SA_RESPONDER);
+
+	return record_v2_IKE_INTEMEDIATE_response(ike, md, local_secret) ? STF_OK : STF_INTERNAL_ERROR;
 }
 
 static stf_status process_v2_IKE_INTERMEDIATE_response(struct ike_sa *ike,
@@ -613,7 +710,16 @@ static stf_status process_v2_IKE_INTERMEDIATE_response(struct ike_sa *ike,
 		return STF_FATAL;
 	}
 
-	dbg("No KE payload in INTERMEDIATE RESPONSE, not calculating keys, going to AUTH by completing state transition");
+	/* KE in */
+	const struct dh_desc *group = next_additional_ke_desc(ike);
+	if (group != NULL) {
+		if (!unpack_KE(&ike->sa.st_gr, "Gr", group,
+			       md->chain[ISAKMP_NEXT_v2KE], ike->sa.logger)) {
+			return STF_FATAL;
+		}
+	} else {
+		dbg("No KE payload in INTERMEDIATE RESPONSE, not calculating keys, going to AUTH by completing state transition");
+	}
 
 	/*
 	 * Initiate the calculation of g^xy.
@@ -630,14 +736,38 @@ static stf_status process_v2_IKE_INTERMEDIATE_response(struct ike_sa *ike,
 		.responder = md->hdr.isa_ike_responder_spi,
 	};
 
-	/*
-	 * For now, do only one Intermediate Exchange round and
-	 * proceed with IKE_AUTH.
-	 */
 	submit_dh_shared_secret(/*callback*/&ike->sa, /*task*/&ike->sa, md,
 				ike->sa.st_gr/*initiator needs responder KE*/,
 				process_v2_IKE_INTERMEDIATE_response_continue, HERE);
 	return STF_SUSPEND;
+}
+
+bool calc_v2_ike_intermediate_keymat(struct ike_sa *ike,
+				     const ike_spis_t *new_ike_spis,
+				     where_t where)
+{
+	struct logger *logger = ike->sa.logger;
+	PK11SymKey *shared = ike->sa.st_dh_shared_secret;
+
+	const struct prf_desc *old_prf = ike->sa.st_oakley.ta_prf;
+	PK11SymKey *old_d = ike->sa.st_skey_d_nss;
+	ldbg(logger, "%s() calculating skeyseed using prf %s",
+	     __func__, old_prf->common.fqn);
+
+	PK11SymKey *skeyseed =
+		ikev2_ike_sa_rekey_skeyseed(old_prf, old_d,
+					    shared,
+					    ike->sa.st_ni,
+					    ike->sa.st_nr,
+					    logger);
+	if (skeyseed == NULL) {
+		llog_pexpect(logger, where, "rekey SKEYSEED failed");
+		return false;
+	}
+
+	calc_v2_ike_keymat(&ike->sa, skeyseed, new_ike_spis);
+	symkey_delref(logger, "skeyseed", &skeyseed);
+	return true;
 }
 
 stf_status process_v2_IKE_INTERMEDIATE_response_continue(struct state *st, struct msg_digest *md)
@@ -652,9 +782,15 @@ stf_status process_v2_IKE_INTERMEDIATE_response_continue(struct state *st, struc
 		return STF_FATAL;
 	}
 
-	/*
-	 * XXX: does the keymat need to be re-computed here?
-	 */
+	const struct dh_desc *group = next_additional_ke_desc(ike);
+	if (group != NULL) {
+		if (!calc_v2_ike_intermediate_keymat(ike, &ike->sa.st_ike_spis, HERE)) {
+			/* already logged */
+			return STF_FATAL;
+		}
+	} else {
+		dbg("Not re-computing the keymat");
+	}
 
 	if (ike->sa.st_v2_ike_ppk == PPK_IKE_INTERMEDIATE && md->pd[PD_v2N_PPK_IDENTITY] != NULL) {
 		struct ppk_id_payload payl;
@@ -686,13 +822,16 @@ stf_status process_v2_IKE_INTERMEDIATE_response_continue(struct state *st, struc
 	}
 	/*
 	 * We've done one intermediate exchange round, now proceed to
-	 * IKE AUTH.
+	 * IKE AUTH or the next IKE INTERMEDIATE if there is another KE.
 	 */
-#if 0
-	return next_v2_transition(ike, md, &initiate_v2_IKE_INTERMEDIATE_transition, HERE);
-#else
-	return next_v2_exchange(ike, md, &v2_IKE_AUTH_exchange, HERE);
-#endif
+	const struct v2_exchange *next_exchange;
+	ike->sa.st_v2_ike_intermediate.ke_index++;
+	if (next_additional_ke_desc(ike)) {
+		next_exchange = &v2_IKE_INTERMEDIATE_exchange;
+	} else {
+		next_exchange = &v2_IKE_AUTH_exchange;
+	}
+	return next_v2_exchange(ike, md, next_exchange, HERE);
 }
 
 /*
@@ -716,7 +855,7 @@ static const struct v2_transition v2_IKE_INTERMEDIATE_responder_transition[] = {
 	  .recv_role  = MESSAGE_REQUEST,
 	  .message_payloads.required = v2P(SK),
 	  .encrypted_payloads.required = LEMPTY,
-	  .encrypted_payloads.optional = LEMPTY,
+	  .encrypted_payloads.optional = v2P(KE),
 	  .processor  = process_v2_IKE_INTERMEDIATE_request,
 	  .llog_success = llog_v2_success_exchange_processed,
 	  .timeout_event = EVENT_v2_DISCARD, },
@@ -729,7 +868,8 @@ static const struct v2_transition v2_IKE_INTERMEDIATE_response_transition[] = {
 	  .exchange   = ISAKMP_v2_IKE_INTERMEDIATE,
 	  .recv_role  = MESSAGE_RESPONSE,
 	  .message_payloads.required = v2P(SK),
-	  .message_payloads.optional = LEMPTY,
+	  .encrypted_payloads.required = LEMPTY,
+	  .encrypted_payloads.optional = v2P(KE),
 	  .processor  = process_v2_IKE_INTERMEDIATE_response,
 	  .llog_success = llog_v2_success_exchange_processed,
 	  .timeout_event = EVENT_v2_DISCARD, },
