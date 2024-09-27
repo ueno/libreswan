@@ -312,3 +312,25 @@ const struct dh_desc ike_alg_dh_curve25519 = {
 	.dh_ops = &ike_alg_dh_nss_ecp_ops,
 };
 #endif
+
+#ifdef USE_DH36
+const struct dh_desc ike_alg_dh_ml_kem_768 = {
+	.common = {
+		.algo_type = IKE_ALG_DH,
+		.fqn = "DH36",
+		.names = "dh36,ml_kem_768",
+		.id = {
+			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_ML_KEM_768,
+			[IKEv1_IPSEC_ID] = -1,
+			[IKEv2_ALG_ID] = OAKLEY_GROUP_ML_KEM_768,
+		},
+	},
+	.group = OAKLEY_GROUP_ML_KEM_768,
+	.bytes = KYBER768_PUBLIC_KEY_BYTES,
+	.is_kem = true,
+	.kem_mechanism = CKM_NSS_KYBER,
+	.kem_generation_mechanism = CKM_NSS_KYBER_KEY_PAIR_GEN,
+	.kem_generation_params = CKP_NSS_KYBER_768_ROUND3,
+	.dh_ops = &ike_alg_dh_nss_kem_ops,
+};
+#endif

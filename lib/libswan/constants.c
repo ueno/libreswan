@@ -1809,14 +1809,17 @@ static const char *const oakley_group_name[] = {
 	S(OAKLEY_GROUP_BRAINPOOL_P512R1), /* RFC 6932 */
 	S(OAKLEY_GROUP_CURVE25519), /* RFC-ietf-ipsecme-safecurves-05 */
 	S(OAKLEY_GROUP_CURVE448), /* RFC-ietf-ipsecme-safecurves-05 */
-	/* 33 - 32767 Unassigned */
+	S(OAKLEY_GROUP_ML_KEM_512), /* draft-kampanakis-ml-kem-ikev2 */
+	S(OAKLEY_GROUP_ML_KEM_768), /* draft-kampanakis-ml-kem-ikev2 */
+	S(OAKLEY_GROUP_ML_KEM_1024), /* draft-kampanakis-ml-kem-ikev2 */
+	/* 33 - 34, 38 - 32767 Unassigned */
 	/* 32768 - 65535 Reserved for private use */
 #undef S
 };
 
 enum_names oakley_group_names = {
 	OAKLEY_GROUP_NONE,
-	OAKLEY_GROUP_CURVE448,
+	OAKLEY_GROUP_ML_KEM_1024,
 	ARRAY_REF(oakley_group_name),
 	"OAKLEY_GROUP_", /* prefix */
 	NULL

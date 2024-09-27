@@ -864,6 +864,9 @@ static const struct dh_desc *dh_descriptors[] = {
 #ifdef USE_DH31
 	&ike_alg_dh_curve25519,
 #endif
+#ifdef USE_DH36
+	&ike_alg_dh_ml_kem_768,
+#endif
 };
 
 static void dh_desc_check(const struct ike_alg *alg, struct logger *logger)
@@ -892,7 +895,7 @@ static void dh_desc_check(const struct ike_alg *alg, struct logger *logger)
 				      ? dh->common.id[IKEv1_IPSEC_ID] == dh->group
 				      : dh->dh_ops == &ike_alg_dh_nss_ecp_ops
 				      ? dh->common.id[IKEv1_IPSEC_ID] < 0
-				      : false));
+				      : dh->dh_ops == &ike_alg_dh_nss_kem_ops));
 	}
 }
 

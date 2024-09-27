@@ -68,5 +68,6 @@ struct dh_ops {
 
 extern const struct dh_ops ike_alg_dh_nss_ecp_ops;
 extern const struct dh_ops ike_alg_dh_nss_modp_ops;
+extern const struct dh_ops ike_alg_dh_nss_kem_ops;
 
 #endif

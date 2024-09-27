@@ -39,6 +39,9 @@ extern const struct dh_desc ike_alg_dh_dh24;
 #ifdef USE_DH31
 extern const struct dh_desc ike_alg_dh_curve25519;
 #endif
+#ifdef USE_DH36
+extern const struct dh_desc ike_alg_dh_ml_kem_768;
+#endif
 
 /*
  * IKEv2 RFC 7296 uses the term "NONE" when referring to no DH

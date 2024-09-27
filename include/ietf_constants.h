@@ -1464,10 +1464,13 @@ enum ike_trans_type_dh {
 	OAKLEY_GROUP_BRAINPOOL_P512R1 = 30, /* RFC 6932 */
 	OAKLEY_GROUP_CURVE25519 = 31, /* RFC-ietf-ipsecme-safecurves-05 */
 	OAKLEY_GROUP_CURVE448 = 32, /* RFC-ietf-ipsecme-safecurves-05 */
+	OAKLEY_GROUP_ML_KEM_512 = 35, /* draft-kampanakis-ml-kem-ikev2 */
+	OAKLEY_GROUP_ML_KEM_768 = 36, /* draft-kampanakis-ml-kem-ikev2 */
+	OAKLEY_GROUP_ML_KEM_1024 = 37, /* draft-kampanakis-ml-kem-ikev2 */
 
 	OAKLEY_GROUP_PSTATS_ROOF
 
-	/* 33 - 32767 Unassigned */
+	/* 33 - 34, 38 - 32767 Unassigned */
 	/* 32768 - 65535 Reserved for private use */
 };
 /*

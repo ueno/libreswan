@@ -893,6 +893,11 @@ ifeq ($(USE_DH31),true)
 USERLAND_CFLAGS += -DUSE_DH31
 endif
 
+USE_DH36 ?= true
+ifeq ($(USE_DH36),true)
+USERLAND_CFLAGS += -DUSE_DH36
+endif
+
 USE_MD5 ?= true
 ifeq ($(USE_MD5),true)
 USERLAND_CFLAGS += -DUSE_MD5

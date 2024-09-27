@@ -720,6 +720,10 @@ struct dh_desc {
 	/* Whether this is a KEM key exchange */
 	bool is_kem;
 
+	CK_MECHANISM_TYPE kem_mechanism;
+	CK_MECHANISM_TYPE kem_generation_mechanism;
+	CK_NSS_KEM_PARAMETER_SET_TYPE kem_generation_params;
+
 	const struct dh_ops *dh_ops;
 };
 

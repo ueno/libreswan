@@ -86,6 +86,12 @@ const char *str_nss_ckm(CK_MECHANISM_TYPE mechanism, enum_buf *buf)
 #ifdef CKM_NSS_IKE1_APP_B_PRF_DERIVE /* print whenever defined */
 		CASE(CKM_NSS_IKE1_APP_B_PRF_DERIVE);
 #endif
+#ifdef CKM_NSS_KYBER_KEY_PAIR_GEN /* print whenever defined */
+		CASE(CKM_NSS_KYBER_KEY_PAIR_GEN);
+#endif
+#ifdef CKM_NSS_KYBER /* print whenever defined */
+		CASE(CKM_NSS_KYBER);
+#endif
 
 		CASE(CKM_VENDOR_DEFINED);
 
