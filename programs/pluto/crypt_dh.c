@@ -92,10 +92,34 @@ struct dh_local_secret *calc_dh_local_secret(const struct dh_desc *group, struct
 	return secret;
 }
 
+struct dh_local_secret *create_dh_local_secret(const struct dh_desc *group, struct logger *logger)
+{
+	struct dh_local_secret *secret = refcnt_alloc(struct dh_local_secret, HERE);
+	secret->group = group;
+	LDBGP_JAMBUF(DBG_CRYPT, logger, buf) {
+		jam_dh_local_secret(buf, secret);
+		jam_string(buf, "created");
+	}
+	return secret;
+}
+
 shunk_t dh_local_secret_ke(struct dh_local_secret *local_secret)
 {
 	return local_secret->group->dh_ops->local_secret_ke(local_secret->group,
 							    local_secret->pubk);
+}
+
+diag_t dh_local_secret_encapsulate_ke(struct dh_local_secret *local_secret,
+				      chunk_t remote_ke,
+				      PK11SymKey **shared_secret,
+				      chunk_t *g,
+				      struct logger *logger)
+{
+	return local_secret->group->dh_ops->encapsulate(local_secret->group,
+							remote_ke,
+							shared_secret,
+							g,
+							logger);
 }
 
 const struct dh_desc *dh_local_secret_desc(struct dh_local_secret *local_secret)
@@ -217,4 +241,92 @@ void submit_dh_shared_secret(struct state *callback_sa,
 	submit_task(/*callback*/callback_sa, /*task*/dh_st, md,
 		    /*detach_whack*/false,
 		    task, &dh_shared_secret_handler, where);
+}
+
+/*
+ * Compute KEM shared secret by decapsulation. This should be only
+ * called by initiator after receiving the ciphertext.
+ */
+/* MUST BE THREAD-SAFE */
+
+static void compute_kem_decapsulate(struct logger *logger,
+				     struct task *task,
+				     int thread_unused UNUSED)
+{
+	struct dh_local_secret *secret = task->local_secret;
+	diag_t diag = secret->group->dh_ops->decapsulate(secret->group,
+							 secret->privk,
+							 task->remote_ke,
+							 &task->shared_secret,
+							 logger);
+	if (diag != NULL) {
+		llog(RC_LOG, logger, "%s", str_diag(diag));
+		pfree_diag(&diag);
+		return;
+	}
+	/*
+	 * The IKEv2 documentation, even for ECP, refers to "g^ir".
+	 */
+	if (DBGP(DBG_CRYPT)) {
+		LLOG_JAMBUF(DEBUG_STREAM, logger, buf) {
+			jam_dh_local_secret(buf, secret);
+			jam(buf, "computed shared DH secret key@%p",
+			    task->shared_secret);
+		}
+		LDBG_symkey(logger, "dh-shared ", "g^ir", task->shared_secret);
+	}
+}
+
+static void cleanup_kem_decapsulate(struct task **task)
+{
+	dh_local_secret_delref(&(*task)->local_secret, HERE);
+	free_chunk_content(&(*task)->remote_ke);
+	symkey_delref(&global_logger, "DH secret", &(*task)->shared_secret);
+	pfreeany(*task);
+}
+
+static stf_status complete_kem_decapsulate(struct state *task_st,
+					    struct msg_digest *md,
+					    struct task *task)
+{
+	struct state *dh_st = state_by_serialno(task->dh_serialno);
+	dbg("completing DH shared secret for "PRI_SO"/"PRI_SO,
+	    task_st->st_serialno, dh_st->st_serialno);
+	pexpect(dh_st->st_dh_shared_secret == NULL);
+	symkey_delref(dh_st->logger, "st_kem_decapsulate", &dh_st->st_dh_shared_secret);
+	/* transfer */
+	dh_st->st_dh_shared_secret = task->shared_secret;
+	task->shared_secret = NULL;
+	stf_status status = task->cb(task_st, md);
+	return status;
+}
+
+static const struct task_handler kem_decapsulate_handler = {
+	.name = "kem decapsulate",
+	.cleanup_cb = cleanup_kem_decapsulate,
+	.computer_fn = compute_kem_decapsulate,
+	.completed_cb = complete_kem_decapsulate,
+};
+
+void submit_kem_shared_secret(struct state *callback_sa,
+			      struct state *dh_st,
+			      struct msg_digest *md,
+			      chunk_t remote_ke,
+			      dh_shared_secret_cb *cb, where_t where)
+{
+	dbg("submitting DH shared secret for "PRI_SO"/"PRI_SO" "PRI_WHERE,
+	    callback_sa->st_serialno, dh_st->st_serialno, pri_where(where));
+	if (dh_st->st_dh_shared_secret != NULL) {
+		llog_pexpect(dh_st->logger, where,
+			     "in %s expecting st->st_dh_shared_secret == NULL",
+			     __func__);
+	}
+	struct task *task = alloc_thing(struct task, "kem");
+	task->remote_ke = clone_hunk(remote_ke, "KEM crypto");
+	task->local_secret = dh_local_secret_addref(dh_st->st_dh_local_secret, HERE);
+	task->dh_serialno = dh_st->st_serialno;
+	task->cb = cb;
+	submit_task(/*callback*/callback_sa, /*task*/dh_st, md,
+		    /*detach_whack*/false,
+		    task, &kem_decapsulate_handler, where);
 }

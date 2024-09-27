@@ -496,9 +496,15 @@ static stf_status process_v2_IKE_INTERMEDIATE_response(struct ike_sa *ike,
 		.responder = md->hdr.isa_ike_responder_spi,
 	};
 
-	submit_dh_shared_secret(/*callback*/&ike->sa, /*task*/&ike->sa, md,
-				ike->sa.st_gr/*initiator needs responder KE*/,
-				process_v2_IKE_INTERMEDIATE_response_continue, HERE);
+	if (group->is_kem) {
+		submit_kem_shared_secret(/*callback*/&ike->sa, /*task*/&ike->sa, md,
+					 ike->sa.st_gr/*initiator needs responder KE*/,
+					 process_v2_IKE_INTERMEDIATE_response_continue, HERE);
+	} else {
+		submit_dh_shared_secret(/*callback*/&ike->sa, /*task*/&ike->sa, md,
+					ike->sa.st_gr/*initiator needs responder KE*/,
+					process_v2_IKE_INTERMEDIATE_response_continue, HERE);
+	}
 	return STF_SUSPEND;
 }
 

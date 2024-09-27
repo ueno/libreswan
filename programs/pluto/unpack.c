@@ -55,7 +55,7 @@ bool unpack_KE(chunk_t *dest, const char *val_name,
 		return false;
 	}
 	struct pbs_in *pbs = &ke_pd->pbs;
-	if (pbs_left(pbs) != gr->bytes) {
+	if (!gr->is_kem && pbs_left(pbs) != gr->bytes) {
 		llog(RC_LOG, logger,
 			    "KE has %u byte DH public value; %u required",
 			    (unsigned) pbs_left(pbs), (unsigned) gr->bytes);

@@ -45,12 +45,25 @@ struct dh_ops {
 				  struct logger *logger);
 	shunk_t (*local_secret_ke)(const struct dh_desc *group,
 				   const SECKEYPublicKey *local_pubk);
+	/* Not used by KEM based key exchange */
 	diag_t (*calc_shared_secret)(const struct dh_desc *group,
 				     SECKEYPrivateKey *local_privk,
 				     const SECKEYPublicKey *local_pubk,
 				     chunk_t remote_ke,
 				     PK11SymKey **shared_secret,
 				     struct logger *logger) MUST_USE_RESULT;
+	/* Only used by KEM based key exchange */
+	diag_t (*encapsulate)(const struct dh_desc *group,
+			      chunk_t remote_ke, /* remote public key */
+			      PK11SymKey **shared_secret,
+			      chunk_t *ciphertext,
+			      struct logger *logger) MUST_USE_RESULT;
+	/* Only used by KEM based key exchange */
+	diag_t (*decapsulate)(const struct dh_desc *group,
+			      SECKEYPrivateKey *local_privk,
+			      chunk_t remote_ke, /* remote ciphertext */
+			      PK11SymKey **shared_secret,
+			      struct logger *logger) MUST_USE_RESULT;
 };
 
 extern const struct dh_ops ike_alg_dh_nss_ecp_ops;

@@ -717,6 +717,9 @@ struct dh_desc {
 	 */
 	bool nss_adds_ec_point_form_uncompressed;
 
+	/* Whether this is a KEM key exchange */
+	bool is_kem;
+
 	const struct dh_ops *dh_ops;
 };
 

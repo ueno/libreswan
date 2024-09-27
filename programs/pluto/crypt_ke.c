@@ -57,6 +57,7 @@ struct task {
 	const struct dh_desc *dh;
 	chunk_t nonce;
 	struct dh_local_secret *local_secret;
+	enum sa_role sa_role;
 	ke_and_nonce_cb *cb;
 };
 
@@ -65,7 +66,12 @@ static void compute_ke_and_nonce(struct logger *logger,
 				 int thread_unused UNUSED)
 {
 	if (task->dh != NULL) {
-		task->local_secret = calc_dh_local_secret(task->dh, logger);
+		/* KEM: responder doesn't need their own keys */
+		if (task->dh->is_kem && task->sa_role == SA_RESPONDER) {
+			task->local_secret = create_dh_local_secret(task->dh, logger);
+		} else {
+			task->local_secret = calc_dh_local_secret(task->dh, logger);
+		}
 		if (DBGP(DBG_CRYPT)) {
 			DBG_log("NSS: Local DH %s secret (pointer): %p",
 				task->dh->common.fqn, task->local_secret);
@@ -112,6 +118,7 @@ void submit_ke_and_nonce(struct state *callback_sa,
 	struct task *task = alloc_thing(struct task, "dh");
 	task->dh = dh;
 	task->cb = cb;
+	task->sa_role = callback_sa->st_sa_role;
 	submit_task(/*callback*/callback_sa, /*task*/task_sa, md, detach_whack,
 		    task, &ke_and_nonce_handler, where);
 }
@@ -144,15 +151,27 @@ void unpack_KE_from_helper(struct state *st, struct dh_local_secret *local_secre
 	 * one) and only set st_oakley.group when the initial
 	 * responder comes back with a vald accepted propsal and KE.
 	 */
+	const struct dh_desc *group = dh_local_secret_desc(local_secret);
 	if (DBGP(DBG_CRYPT)) {
-		const struct dh_desc *group = dh_local_secret_desc(local_secret);
 		DBG_log("wire (crypto helper) group %s and state group %s %s",
 			group->common.fqn,
 			st->st_oakley.ta_dh ? st->st_oakley.ta_dh->common.fqn : "NULL",
 			group == st->st_oakley.ta_dh ? "match" : "differ");
 	}
 
-	replace_chunk(g, dh_local_secret_ke(local_secret), "KE");
+	if (group->is_kem && st->st_sa_role == SA_RESPONDER) {
+		diag_t d = dh_local_secret_encapsulate_ke(local_secret, st->st_gi,
+							  &st->st_dh_shared_secret, g,
+							  st->logger);
+		if (d != NULL) {
+			/* FIXME: should propagate error? */
+			llog(RC_LOG, st->logger, "encapsulate: %s", str_diag(d));
+			pfree_diag(&d);
+		}
+	} else {
+		replace_chunk(g, dh_local_secret_ke(local_secret), "KE");
+	}
+
 	pexpect(st->st_dh_local_secret == NULL);
 	st->st_dh_local_secret = dh_local_secret_addref(local_secret, HERE);
 }

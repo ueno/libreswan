@@ -45,7 +45,10 @@ struct logger;
 struct dh_local_secret;
 
 struct dh_local_secret *calc_dh_local_secret(const struct dh_desc *group, struct logger *logger);
+struct dh_local_secret *create_dh_local_secret(const struct dh_desc *group, struct logger *logger);
 shunk_t dh_local_secret_ke(struct dh_local_secret *local_secret);
+diag_t dh_local_secret_encapsulate_ke(struct dh_local_secret *local_secret, chunk_t remote_ke,
+				      PK11SymKey **shared_secret, chunk_t *g, struct logger *logger);
 const struct dh_desc *dh_local_secret_desc(struct dh_local_secret *local_secret);
 
 struct dh_local_secret *dh_local_secret_addref(struct dh_local_secret *local_secret, where_t where);
@@ -64,6 +67,12 @@ extern void submit_dh_shared_secret(struct state *task_st,
 				    struct msg_digest *md,
 				    chunk_t remote_ke,
 				    dh_shared_secret_cb *callback, where_t where);
+
+extern void submit_kem_shared_secret(struct state *callback_sa,
+				     struct state *dh_st,
+				     struct msg_digest *md,
+				     chunk_t remote_ke,
+				     dh_shared_secret_cb *cb, where_t where);
 
 /* internal */
 void calc_v1_skeyid_and_iv(struct state *st);
