@@ -453,13 +453,41 @@ void schedule_v2_replace_event(struct state *st)
 	pexpect(st_v2_lifetime_event(st)->ev_type == kind);
 }
 
+static bool calc_v2_ike_intermediate_keymat(struct ike_sa *ike,
+					    const ike_spis_t *new_ike_spis,
+					    where_t where)
+{
+	struct logger *logger = ike->sa.logger;
+	PK11SymKey *shared = ike->sa.st_dh_shared_secret;
+
+	const struct prf_desc *old_prf = ike->sa.st_oakley.ta_prf;
+	PK11SymKey *old_d = ike->sa.st_skey_d_nss;
+	ldbg(logger, "%s() calculating skeyseed using prf %s",
+	     __func__, old_prf->common.fqn);
+
+	PK11SymKey *skeyseed =
+		ikev2_ike_sa_rekey_skeyseed(old_prf, old_d,
+					    shared,
+					    ike->sa.st_ni,
+					    ike->sa.st_nr,
+					    logger);
+	if (skeyseed == NULL) {
+		llog_pexpect(logger, where, "rekey SKEYSEED failed");
+		return false;
+	}
+
+	calc_v2_ike_keymat(&ike->sa, skeyseed, new_ike_spis);
+	symkey_delref(logger, "skeyseed", &skeyseed);
+	return true;
+}
+
 static stf_status process_v2_request_no_skeyseed_continue(struct state *ike_st,
 							  struct msg_digest *unused_md)
 {
 	struct ike_sa *ike = pexpect_ike_sa(ike_st);
 	pexpect(ike->sa.st_sa_role == SA_RESPONDER);
 	pexpect(v2_msg_role(unused_md) == NO_MESSAGE);
-	pexpect(ike->sa.st_state == &state_v2_IKE_SA_INIT_R);
+	pexpect(ike->sa.st_state == &state_v2_IKE_SA_INIT_R || ike->sa.st_state == &state_v2_IKE_INTERMEDIATE_R);
 	dbg("%s() for #%lu %s: calculating g^{xy}, sending R2",
 	    __func__, ike->sa.st_serialno, ike->sa.st_state->name);
 
@@ -481,9 +509,17 @@ static stf_status process_v2_request_no_skeyseed_continue(struct state *ike_st,
 		return STF_FATAL;
 	}
 
-	if (!calc_v2_new_ike_keymat(ike, &ike->sa.st_ike_spis, HERE)) {
-		/* already logged */
-		return STF_FATAL;
+	if (ike->sa.st_state == &state_v2_IKE_SA_INIT_R) {
+		if (!calc_v2_new_ike_keymat(ike, &ike->sa.st_ike_spis, HERE)) {
+			/* already logged */
+			return STF_FATAL;
+		}
+	} else if (ike->sa.st_state == &state_v2_IKE_INTERMEDIATE_R) {
+		if (!calc_v2_ike_intermediate_keymat(ike, &ike->sa.st_ike_spis,
+						     HERE)) {
+			/* already logged */
+			return STF_FATAL;
+		}
 	}
 
 	/*
@@ -532,9 +568,10 @@ void process_v2_request_no_skeyseed(struct ike_sa *ike, struct msg_digest *md)
 	}
 
 	if (!PEXPECT(ike->sa.logger, (ike->sa.st_state == &state_v2_IKE_SA_INIT_R ||
+				      ike->sa.st_state == &state_v2_IKE_INTERMEDIATE_R ||
 				      ike->sa.st_state == &state_v2_IKE_SESSION_RESUME_R))) {
 		/*
-		 * Still in IKE_SA_INIT responder state.
+		 * Still in IKE_SA_INIT or IKE_INTERMEDIATE responder state.
 		 */
 		return;
 	}
@@ -542,8 +579,9 @@ void process_v2_request_no_skeyseed(struct ike_sa *ike, struct msg_digest *md)
 	/*
 	 * Not yet officially started on next message.
 	 */
-	if (!PEXPECT(ike->sa.logger, (ike->sa.st_v2_msgid_windows.responder.recv == 0 &&
-				      ike->sa.st_v2_msgid_windows.responder.sent == 0 &&
+	intmax_t first_msgid = ike->sa.st_state == &state_v2_IKE_INTERMEDIATE_R ? ike->sa.st_v2_ike_intermediate.id : 0;
+	if (!PEXPECT(ike->sa.logger, (ike->sa.st_v2_msgid_windows.responder.recv == first_msgid &&
+				      ike->sa.st_v2_msgid_windows.responder.sent == first_msgid &&
 				      ike->sa.st_v2_msgid_windows.responder.wip == -1))) {
 		return;
 	}
