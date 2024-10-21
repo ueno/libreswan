@@ -711,6 +711,8 @@ void submit_v2_CREATE_CHILD_SA_new_child(struct ike_sa *ike,
 							   SA_INITIATOR,
 							   STATE_V2_NEW_CHILD_I0,
 							   whackfd);
+	/* reference is taken by larval_child */
+	fd_delref(&whackfd);
 
 	free_chunk_content(&larval_child->sa.st_ni); /* this is from the parent. */
 	free_chunk_content(&larval_child->sa.st_nr); /* this is from the parent. */
@@ -718,7 +720,8 @@ void submit_v2_CREATE_CHILD_SA_new_child(struct ike_sa *ike,
 
 	/* share the love; XXX: something better? */
 	fd_delref(&ike->sa.st_logger->object_whackfd);
-	ike->sa.st_logger->object_whackfd = fd_addref(whackfd);
+	ike->sa.st_logger->object_whackfd =
+		fd_addref(larval_child->sa.st_logger->object_whackfd);
 	larval_child->sa.st_policy = policy;
 
 	llog_sa(RC_LOG, larval_child,
