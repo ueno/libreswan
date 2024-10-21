@@ -628,6 +628,14 @@ stf_status process_v2_CREATE_CHILD_SA_rekey_child_request(struct ike_sa *ike,
 							  struct child_sa *larval_child,
 							  struct msg_digest *md)
 {
+	/*
+	 * CRYPTO continuation is ongoing as the same IKE SA is shared
+	 * between initiator and responder, ignore it for now and let
+	 * the initiator retransmit.
+	 */
+	if (verbose_state_busy(&ike->sa)) {
+		return STF_IGNORE;
+	}
 
 	struct child_sa *predecessor = find_v2N_REKEY_SA_child(ike, md);
 	if (predecessor == NULL) {
@@ -831,6 +839,15 @@ stf_status process_v2_CREATE_CHILD_SA_new_child_request(struct ike_sa *ike,
 							struct child_sa *larval_child,
 							struct msg_digest *md)
 {
+	/*
+	 * CRYPTO continuation is ongoing as the same IKE SA is shared
+	 * between initiator and responder, ignore it for now and let
+	 * the initiator retransmit.
+	 */
+	if (verbose_state_busy(&ike->sa)) {
+		return STF_IGNORE;
+	}
+
 	pexpect(larval_child == NULL);
 	larval_child = new_v2_child_state(ike->sa.st_connection,
 					  ike, IPSEC_SA, SA_RESPONDER,
