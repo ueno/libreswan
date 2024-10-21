@@ -671,7 +671,7 @@ void submit_v2_CREATE_CHILD_SA_new_child(struct ike_sa *ike,
 	struct child_sa *larval_child = new_v2_child_state(c, ike, IPSEC_SA,
 							   SA_INITIATOR,
 							   STATE_V2_NEW_CHILD_I0,
-							   whackfd);
+							   null_fd);
 
 	free_chunk_content(&larval_child->sa.st_ni); /* this is from the parent. */
 	free_chunk_content(&larval_child->sa.st_nr); /* this is from the parent. */
