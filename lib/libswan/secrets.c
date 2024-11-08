@@ -964,9 +964,7 @@ void lsw_free_preshared_secrets(struct secret **psecrets, struct logger *logger)
 				break;
 			case SECRET_RSA:
 			case SECRET_ECDSA:
-				/* Note: pub is all there is */
-				SECKEY_DestroyPrivateKey(s->stuff.u.pubkey.private_key);
-				s->stuff.u.pubkey.content.type->free_pubkey_content(&s->stuff.u.pubkey.content);
+				secret_pubkey_stuff_delref(&s->stuff.u.pubkey, HERE);
 				break;
 			default:
 				bad_case(s->stuff.kind);
@@ -1185,6 +1183,26 @@ static const struct pubkey_type *private_key_type_nss(SECKEYPrivateKey *private_
 	}
 }
 
+struct secret_pubkey_stuff *secret_pubkey_stuff_addref(struct secret_pubkey_stuff *pks,
+						       where_t where)
+{
+	return addref_where(pks, where);
+}
+
+static void free_secret_pubkey_stuff(void *obj, where_t where UNUSED)
+{
+	struct secret_pubkey_stuff *last = obj;
+	SECKEY_DestroyPrivateKey(last->private_key);
+	last->content.type->free_pubkey_content(&last->content);
+	/* hack; we do not free LAST, because it is allocated as part
+	 * of a secret_stuff struct */
+}
+
+void secret_pubkey_stuff_delref(struct secret_pubkey_stuff *pks, where_t where)
+{
+	refcnt_delref_where("pks", pks, &pks->refcnt, where);
+}
+
 static err_t add_private_key(struct secret **secrets, const struct secret_stuff **pks,
 			     SECKEYPublicKey *pubk, SECItem *ckaid_nss,
 			     const struct pubkey_type *type, SECKEYPrivateKey *private_key)
@@ -1206,6 +1224,13 @@ static err_t add_private_key(struct secret **secrets, const struct secret_stuff 
 	passert(s->stuff.u.pubkey.content.type == type);
 	pexpect(s->stuff.u.pubkey.content.ckaid.len > 0);
 	pexpect(s->stuff.u.pubkey.content.keyid.keyid[0] != '\0');
+
+	/* hack; initialize "interior" refcounting of s->stuff.u.pubkey */
+	static const struct refcnt_base base = {
+		.what = "s->stuff.u.pubkey",
+		.free = free_secret_pubkey_stuff,
+	};
+	refcnt_init(&s->stuff.u.pubkey, &s->stuff.u.pubkey.refcnt, &base, HERE);
 
 	add_secret(secrets, s, "lsw_add_rsa_secret");
 	*pks = &s->stuff;

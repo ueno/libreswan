@@ -63,13 +63,20 @@ bool submit_v2_auth_signature(struct ike_sa *ike,
 			      where_t where)
 {
 	const struct connection *c = ike->sa.st_connection;
+	const struct secret_stuff *pks = get_local_private_key(c, signer->type,
+							       ike->sa.st_logger);
+	if (pks == NULL) {
+		/* failure: no key to use */
+		return false;
+	}
+	secret_pubkey_stuff_addref((struct secret_pubkey_stuff *)&pks->u.pubkey, HERE);
+
 	struct task task = {
 		.cb = cb,
 		.hash_algo = hash_algo,
 		.hash_to_sign = *hash_to_sign,
 		.signer = signer,
-		.pks = get_local_private_key(c, signer->type,
-					     ike->sa.st_logger),
+		.pks = pks,
 	};
 
 	if (task.pks == NULL)
@@ -124,5 +131,6 @@ static stf_status v2_auth_signature_completed(struct state *st,
 
 static void v2_auth_signature_cleanup(struct task **task)
 {
+	secret_pubkey_stuff_delref((struct secret_pubkey_stuff *)&(*task)->pks->u.pubkey, HERE);
 	pfreeany(*task);
 }
