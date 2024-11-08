@@ -38,7 +38,7 @@ struct task {
 	const struct crypt_mac hash_to_sign;
 	const struct hash_desc *hash_algo;
 	v2_auth_signature_cb *cb;
-	const struct secret_stuff *pks;
+	struct secret_pubkey_stuff *pks;
 	const struct pubkey_signer *signer;
 	/* out */
 	struct hash_signature signature;
@@ -63,18 +63,20 @@ bool submit_v2_auth_signature(struct ike_sa *ike,
 			      where_t where)
 {
 	const struct connection *c = ike->sa.st_connection;
+	const struct secret_stuff *s = get_local_private_key(c, signer->type,
+							     ike->sa.st_logger);
+	if (s == NULL) {
+		/* failure: no key to use */
+		return false;
+	}
+
 	struct task task = {
 		.cb = cb,
 		.hash_algo = hash_algo,
 		.hash_to_sign = *hash_to_sign,
 		.signer = signer,
-		.pks = get_local_private_key(c, signer->type,
-					     ike->sa.st_logger),
+		.pks = secret_pubkey_stuff_addref(s->u.pubkey, HERE),
 	};
-
-	if (task.pks == NULL)
-		/* failure: no key to use */
-		return false;
 
 	submit_task(ike->sa.st_logger, &ike->sa /*state to resume*/,
 		    clone_thing(task, "signature task"),
@@ -85,7 +87,7 @@ bool submit_v2_auth_signature(struct ike_sa *ike,
 static struct hash_signature v2_auth_signature(struct logger *logger,
 					       const struct crypt_mac *hash_to_sign,
 					       const struct hash_desc *hash_algo,
-					       const struct secret_stuff *pks,
+					       const struct secret_pubkey_stuff *pks,
 					       const struct pubkey_signer *signer)
 {
 	passert(hash_to_sign->len <= sizeof(hash_to_sign->ptr/*array*/)); /*hint to coverity*/
@@ -95,8 +97,14 @@ static struct hash_signature v2_auth_signature(struct logger *logger,
 		DBG_dump_hunk("hash to sign", *hash_to_sign);
 	}
 
+	struct secret_stuff s = {
+		.kind = pks->content.type->private_key_kind,
+		.line = 0,
+		.u.pubkey = (struct secret_pubkey_stuff *)pks,
+	};
+
 	logtime_t sign_time = logtime_start(logger);
-	struct hash_signature sig = signer->sign_hash(pks,
+	struct hash_signature sig = signer->sign_hash(&s,
 						      hash_to_sign->ptr,
 						      hash_to_sign->len,
 						      hash_algo,
@@ -124,5 +132,6 @@ static stf_status v2_auth_signature_completed(struct state *st,
 
 static void v2_auth_signature_cleanup(struct task **task)
 {
+	secret_pubkey_stuff_delref(&(*task)->pks, HERE);
 	pfreeany(*task);
 }

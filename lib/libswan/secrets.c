@@ -964,10 +964,7 @@ void lsw_free_preshared_secrets(struct secret **psecrets, struct logger *logger)
 				break;
 			case SECRET_RSA:
 			case SECRET_ECDSA:
-				/* Note: pub is all there is */
-				SECKEY_DestroyPrivateKey(s->stuff.u.pubkey->private_key);
-				s->stuff.u.pubkey->content.type->free_pubkey_content(&s->stuff.u.pubkey->content);
-				pfree(s->stuff.u.pubkey);
+				secret_pubkey_stuff_delref(&s->stuff.u.pubkey, HERE);
 				break;
 			default:
 				bad_case(s->stuff.kind);
@@ -1186,6 +1183,25 @@ static const struct pubkey_type *private_key_type_nss(SECKEYPrivateKey *private_
 	}
 }
 
+struct secret_pubkey_stuff *secret_pubkey_stuff_addref(struct secret_pubkey_stuff *pks,
+						       where_t where)
+{
+	return addref_where(pks, where);
+}
+
+static void free_secret_pubkey_stuff(void *obj, where_t where UNUSED)
+{
+	struct secret_pubkey_stuff *pks = obj;
+	SECKEY_DestroyPrivateKey(pks->private_key);
+	pks->content.type->free_pubkey_content(&pks->content);
+	pfree(pks);
+}
+
+void secret_pubkey_stuff_delref(struct secret_pubkey_stuff **pks, where_t where)
+{
+	delref_where(pks, where)
+}
+
 static err_t add_private_key(struct secret **secrets, const struct secret_stuff **pks,
 			     SECKEYPublicKey *pubk, SECItem *ckaid_nss,
 			     const struct pubkey_type *type, SECKEYPrivateKey *private_key)
@@ -1194,7 +1210,7 @@ static err_t add_private_key(struct secret **secrets, const struct secret_stuff 
 	s->stuff.kind = type->private_key_kind;
 	s->stuff.line = 0;
 	/* make an unpacked copy of the private key */
-	s->stuff.u.pubkey = alloc_thing(struct secret_pubkey_stuff, "secret_pubkey_stuff");
+	s->stuff.u.pubkey = refcnt_alloc(struct secret_pubkey_stuff, free_secret_pubkey_stuff, HERE);
 	s->stuff.u.pubkey->private_key = copy_private_key(private_key);
 	err_t err = type->extract_pubkey_content(&s->stuff.u.pubkey->content,
 						 pubk, ckaid_nss);

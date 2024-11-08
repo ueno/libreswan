@@ -74,9 +74,13 @@ enum secret_kind {
 };
 
 struct secret_pubkey_stuff {
+	struct refcnt refcnt;
 	SECKEYPrivateKey *private_key;
 	struct pubkey_content content;
 };
+
+struct secret_pubkey_stuff *secret_pubkey_stuff_addref(struct secret_pubkey_stuff *, where_t where);
+void secret_pubkey_stuff_delref(struct secret_pubkey_stuff **, where_t where);
 
 struct secret_stuff {
 	enum secret_kind kind;
