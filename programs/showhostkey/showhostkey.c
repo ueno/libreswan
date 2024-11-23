@@ -172,14 +172,14 @@ static void print(struct secret_stuff *pks,
 	case SECRET_RSA:
 	case SECRET_ECDSA:
 	{
-		printf("%s", pks->u.pubkey.content.type->name);
-		keyid_t keyid = pks->u.pubkey.content.keyid;
+		printf("%s", pks->u.pubkey->content.type->name);
+		keyid_t keyid = pks->u.pubkey->content.keyid;
 		printf(" keyid: %s", str_keyid(keyid)[0] ? str_keyid(keyid) : "<missing-pubkey>");
 		if (id) {
 			printf(" id: %s", idb);
 		}
 		ckaid_buf cb;
-		const ckaid_t *ckaid = &pks->u.pubkey.content.ckaid;
+		const ckaid_t *ckaid = &pks->u.pubkey->content.ckaid;
 		printf(" ckaid: %s\n", str_ckaid(ckaid, &cb));
 		break;
 	}
@@ -237,7 +237,7 @@ static int pick_by_rsaid(struct secret *secret UNUSED,
 {
 	char *rsaid = (char *)uservoid;
 
-	if (pks->kind == SECRET_RSA && streq(pks->u.pubkey.content.keyid.keyid, rsaid)) {
+	if (pks->kind == SECRET_RSA && streq(pks->u.pubkey->content.keyid.keyid, rsaid)) {
 		/* stop */
 		return 0;
 	} else {
@@ -254,7 +254,7 @@ static int pick_by_ckaid(struct secret *secret UNUSED,
 	switch (pks->kind) {
 	case SECRET_RSA:
 	case SECRET_ECDSA:
-		if (ckaid_starts_with(&pks->u.pubkey.content.ckaid, start)) {
+		if (ckaid_starts_with(&pks->u.pubkey->content.ckaid, start)) {
 			/* stop */
 			return 0;
 		}
@@ -283,7 +283,7 @@ static char *base64_ipseckey_rdata_from_pubkey_secret(struct secret_stuff *pks,
 						      enum ipseckey_algorithm_type *ipseckey_algorithm)
 {
 	chunk_t ipseckey_pubkey = empty_chunk; /* must free */
-	err_t e = pks->u.pubkey.content.type->pubkey_content_to_ipseckey_rdata(&pks->u.pubkey.content,
+	err_t e = pks->u.pubkey->content.type->pubkey_content_to_ipseckey_rdata(&pks->u.pubkey->content,
 									       &ipseckey_pubkey,
 									       ipseckey_algorithm);
 	if (e != NULL) {
@@ -390,7 +390,7 @@ static int show_leftright(struct secret_stuff *pks,
 	}
 	}
 
-	passert(pks->u.pubkey.content.type != NULL);
+	passert(pks->u.pubkey->content.type != NULL);
 
 	char *base64 = NULL;
 	if (pubkey_flg) {
@@ -408,11 +408,11 @@ static int show_leftright(struct secret_stuff *pks,
 	} else {
 		switch (pks->kind) {
 		case SECRET_RSA:
-			printf("\t# rsakey %s\n", pks->u.pubkey.content.keyid.keyid);
+			printf("\t# rsakey %s\n", pks->u.pubkey->content.keyid.keyid);
 			printf("\t%srsasigkey=0s", side);
 			break;
 		case SECRET_ECDSA:
-			printf("\t# ecdsakey %s\n", pks->u.pubkey.content.keyid.keyid);
+			printf("\t# ecdsakey %s\n", pks->u.pubkey->content.keyid.keyid);
 			printf("\t%secdsakey=0s", side);
 			break;
 		default:
@@ -481,13 +481,16 @@ static struct secret_stuff *foreach_nss_private_key(secret_eval func,
 			continue;
 		}
 
+		struct secret_pubkey_stuff pubkey = {
+			.private_key = SECKEY_CopyPrivateKey(private_key), /* add reference */
+		};
+		type->extract_pubkey_content(&pubkey.content, pubk, ckaid_nss);
+
 		struct secret_stuff pks = {
 			.kind = type->private_key_kind,
 			.line = 0,
-			.u.pubkey.private_key = SECKEY_CopyPrivateKey(private_key), /* add reference */
+			.u.pubkey = &pubkey,
 		};
-
-		type->extract_pubkey_content(&pks.u.pubkey.content, pubk, ckaid_nss);
 
 		/*
 		 * Only count private keys that get processed.
@@ -513,8 +516,8 @@ static struct secret_stuff *foreach_nss_private_key(secret_eval func,
 			break;
 		}
 
-		SECKEY_DestroyPrivateKey(pks.u.pubkey.private_key); /* destory reference */
-		type->free_pubkey_content(&pks.u.pubkey.content);
+		SECKEY_DestroyPrivateKey(pks.u.pubkey->private_key); /* destory reference */
+		type->free_pubkey_content(&pks.u.pubkey->content);
 
 		if (ret < 0) {
 			break;

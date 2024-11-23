@@ -88,7 +88,7 @@ struct secret_stuff {
 	int line;
 	union {
 		chunk_t preshared_secret;
-		struct secret_pubkey_stuff pubkey;
+		struct secret_pubkey_stuff *pubkey;
 	} u;
 
 	chunk_t ppk;

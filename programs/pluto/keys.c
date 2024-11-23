@@ -609,7 +609,7 @@ const struct secret_stuff *get_local_private_key(const struct connection *c,
 		 * etc) then best will end up as NULL
 		 */
 		pexpect(pks->kind == type->private_key_kind);
-		pexpect(pks->u.pubkey.content.type == type);
+		pexpect(pks->u.pubkey->content.type == type);
 		dbg("connection %s's %s private key found in NSS DB using cert",
 		    c->name, type->name);
 		return pks;
@@ -657,7 +657,7 @@ const struct secret_stuff *get_local_private_key(const struct connection *c,
 		 * etc) then best will end up as NULL
 		 */
 		pexpect(pks->kind == type->private_key_kind);
-		pexpect(pks->u.pubkey.content.type == type);
+		pexpect(pks->u.pubkey->content.type == type);
 		dbg("connection %s's %s private key found in NSS DB using CKAID",
 		    c->name, type->name);
 		return pks;
@@ -676,7 +676,7 @@ const struct secret_stuff *get_local_private_key(const struct connection *c,
 	passert(pks != NULL);
 
 	pexpect(pks->kind == type->private_key_kind);
-	pexpect(pks->u.pubkey.content.type == type);
+	pexpect(pks->u.pubkey->content.type == type);
 	dbg("connection %s's %s private key found",
 	    c->name, type->name);
 	return pks;
