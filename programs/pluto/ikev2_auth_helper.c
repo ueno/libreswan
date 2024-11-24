@@ -38,7 +38,7 @@ struct task {
 	const struct hash_desc *hash_algo;
 	enum ikev2_auth_method auth_method;
 	v2_auth_signature_cb *cb;
-	const struct private_key_stuff *pks;
+	struct private_key_stuff *pks;
 	/* out */
 	struct hash_signature signature;
 };
@@ -71,19 +71,23 @@ bool submit_v2_auth_signature(struct ike_sa *ike,
 	const struct connection *c = ike->sa.st_connection;
 	switch (authby) {
 	case AUTHBY_RSASIG:
-		task.pks = get_connection_private_key(c, &pubkey_type_rsa,
-						      ike->sa.st_logger);
+		task.pks = (struct private_key_stuff *)
+			get_connection_private_key(c, &pubkey_type_rsa,
+						   ike->sa.st_logger);
 		if (task.pks == NULL)
 			/* failure: no key to use */
 			return false;
+		private_key_stuff_addref(task.pks);
 		break;
 
 	case AUTHBY_ECDSA:
-		task.pks = get_connection_private_key(c, &pubkey_type_ecdsa,
-						      ike->sa.st_logger);
+		task.pks = (struct private_key_stuff *)
+			get_connection_private_key(c, &pubkey_type_ecdsa,
+						   ike->sa.st_logger);
 		if (task.pks == NULL)
 			/* failure: no key to use */
 			return false;
+		private_key_stuff_addref(task.pks);
 		break;
 	default:
 		bad_case(authby);
@@ -114,5 +118,6 @@ static stf_status v2_auth_signature_completed(struct state *st,
 
 static void v2_auth_signature_cleanup(struct task **task)
 {
+	private_key_stuff_delref(&(*task)->pks);
 	pfreeany(*task);
 }

@@ -105,12 +105,12 @@ static void process_secrets_file(struct file_lex_position *flp,
 struct secret {
 	struct secret *next;
 	struct id_list *ids;
-	struct private_key_stuff pks;
+	struct private_key_stuff *pks;
 };
 
 struct private_key_stuff *lsw_get_pks(struct secret *s)
 {
-	return &s->pks;
+	return s->pks;
 }
 
 struct id_list *lsw_get_idlist(const struct secret *s)
@@ -497,8 +497,8 @@ const ckaid_t *pubkey_ckaid(const struct pubkey *pk)
 
 const ckaid_t *secret_ckaid(const struct secret *secret)
 {
-	if (secret->pks.pubkey_type != NULL) {
-		return &secret->pks.ckaid;
+	if (secret->pks->pubkey_type != NULL) {
+		return &secret->pks->ckaid;
 	} else {
 		return NULL;
 	}
@@ -507,13 +507,13 @@ const ckaid_t *secret_ckaid(const struct secret *secret)
 const keyid_t *secret_keyid(const struct secret *secret)
 {
 
-	if (secret->pks.pubkey_type != NULL) {
-		switch (secret->pks.pubkey_type->alg) {
+	if (secret->pks->pubkey_type != NULL) {
+		switch (secret->pks->pubkey_type->alg) {
 		case PUBKEY_ALG_RSA:
 		case PUBKEY_ALG_ECDSA:
-			return &secret->pks.keyid;
+			return &secret->pks->keyid;
 		default:
-			bad_case(secret->pks.pubkey_type->alg);
+			bad_case(secret->pks->pubkey_type->alg);
 		}
 	} else {
 		return NULL;
@@ -535,7 +535,7 @@ struct secret *lsw_foreach_secret(struct secret *secrets,
 				secret_eval func, void *uservoid)
 {
 	for (struct secret *s = secrets; s != NULL; s = s->next) {
-		struct private_key_stuff *pks = &s->pks;
+		struct private_key_stuff *pks = s->pks;
 		int result = (*func)(s, pks, uservoid);
 
 		if (result == 0)
@@ -552,12 +552,12 @@ static struct secret *find_secret_by_pubkey_ckaid_1(struct secret *secrets,
 						    const SECItem *pubkey_ckaid)
 {
 	for (struct secret *s = secrets; s != NULL; s = s->next) {
-		const struct private_key_stuff *pks = &s->pks;
+		const struct private_key_stuff *pks = s->pks;
 		dbg("trying secret %s:%s",
 		    enum_name(&pkk_names, pks->kind),
 		    str_keyid(pks->keyid));
 		if (type == NULL/*wildcard*/ ||
-		    s->pks.pubkey_type == type) {
+		    s->pks->pubkey_type == type) {
 			/* only public/private key pairs have a CKAID */
 			const ckaid_t *sckaid = secret_ckaid(s);
 			if (sckaid != NULL &&
@@ -592,13 +592,13 @@ struct secret *lsw_find_secret_by_id(struct secret *secrets,
 		if (DBGP(DBG_BASE)) {
 			id_buf idl;
 			DBG_log("line %d: key type %s(%s) to type %s",
-				s->pks.line,
+				s->pks->line,
 				enum_name(&pkk_names, kind),
 				str_id(local_id, &idl),
-				enum_name(&pkk_names, s->pks.kind));
+				enum_name(&pkk_names, s->pks->kind));
 		}
 
-		if (s->pks.kind == kind) {
+		if (s->pks->kind == kind) {
 			unsigned int match = match_none;
 
 			if (s->ids == NULL) {
@@ -663,7 +663,7 @@ struct secret *lsw_find_secret_by_id(struct secret *secrets,
 					match |= match_default;
 			}
 
-			dbg("line %d: match=0%02o", s->pks.line, match);
+			dbg("line %d: match=0%02o", s->pks->line, match);
 
 			switch (match) {
 			case match_local:
@@ -694,8 +694,8 @@ struct secret *lsw_find_secret_by_id(struct secret *secrets,
 						same = true;
 						break;
 					case PKK_PSK:
-						same = hunk_eq(s->pks.u.preshared_secret,
-							       best->pks.u.preshared_secret);
+						same = hunk_eq(s->pks->u.preshared_secret,
+							       best->pks->u.preshared_secret);
 						break;
 					case PKK_RSA:
 						/*
@@ -708,8 +708,8 @@ struct secret *lsw_find_secret_by_id(struct secret *secrets,
 						 * work.
 						 */
 						same = same_RSA_public_key(
-							&s->pks.u.RSA_private_key.pub,
-							&best->pks.u.RSA_private_key.pub);
+							&s->pks->u.RSA_private_key.pub,
+							&best->pks->u.RSA_private_key.pub);
 						break;
 					case PKK_ECDSA:
 						/* there are no ECDSA kind of secrets */
@@ -722,8 +722,8 @@ struct secret *lsw_find_secret_by_id(struct secret *secrets,
 						 */
 						break;
 					case PKK_PPK:
-						same = hunk_eq(s->pks.ppk,
-							       best->pks.ppk);
+						same = hunk_eq(s->pks->ppk,
+							       best->pks->ppk);
 						break;
 					default:
 						bad_case(kind);
@@ -740,7 +740,7 @@ struct secret *lsw_find_secret_by_id(struct secret *secrets,
 					dbg("match 0%02o beats previous best_match 0%02o match=%p (line=%d)",
 					    match,
 					    best_match,
-					    s, s->pks.line);
+					    s, s->pks->line);
 
 					/* this is the best match so far */
 					best_match = match;
@@ -755,7 +755,7 @@ struct secret *lsw_find_secret_by_id(struct secret *secrets,
 
 	dbg("concluding with best_match=0%02o best=%p (lineno=%d)",
 	    best_match, best,
-	    best == NULL ? -1 : best->pks.line);
+	    best == NULL ? -1 : best->pks->line);
 
 	return best;
 }
@@ -938,8 +938,8 @@ static err_t process_ppk_static_secret(struct file_lex_position *flp,
 struct secret *lsw_get_ppk_by_id(struct secret *s, chunk_t ppk_id)
 {
 	while (s != NULL) {
-		struct private_key_stuff pks = s->pks;
-		if (pks.kind == PKK_PPK && hunk_eq(pks.ppk_id, ppk_id))
+		struct private_key_stuff *pks = s->pks;
+		if (pks->kind == PKK_PPK && hunk_eq(pks->ppk_id, ppk_id))
 			return s;
 		s = s->next;
 	}
@@ -1026,19 +1026,19 @@ static void process_secret(struct file_lex_position *flp,
 	err_t ugh = NULL;
 
 	if (tokeqword(flp, "psk")) {
-		s->pks.kind = PKK_PSK;
+		s->pks->kind = PKK_PSK;
 		/* preshared key: quoted string or ttodata format */
 		ugh = !shift(flp) ? "ERROR: unexpected end of record in PSK" :
-			process_psk_secret(flp, &s->pks.u.preshared_secret);
+			process_psk_secret(flp, &s->pks->u.preshared_secret);
 	} else if (tokeqword(flp, "xauth")) {
 		/* xauth key: quoted string or ttodata format */
-		s->pks.kind = PKK_XAUTH;
+		s->pks->kind = PKK_XAUTH;
 		ugh = !shift(flp) ? "ERROR: unexpected end of record in PSK" :
-			process_xauth_secret(flp, &s->pks.u.preshared_secret);
+			process_xauth_secret(flp, &s->pks->u.preshared_secret);
 	} else if (tokeqword(flp, "ppks")) {
-		s->pks.kind = PKK_PPK;
+		s->pks->kind = PKK_PPK;
 		ugh = !shift(flp) ? "ERROR: unexpected end of record in static PPK" :
-			process_ppk_static_secret(flp, &s->pks.ppk, &s->pks.ppk_id);
+			process_ppk_static_secret(flp, &s->pks->ppk, &s->pks->ppk_id);
 	} else {
 		ugh = builddiag("WARNING: ignored unrecognized keyword: %s", flp->tok);
 	}
@@ -1056,6 +1056,10 @@ static void process_secret(struct file_lex_position *flp,
 				pfree(i);
 			}
 		}
+		/* no need to use private_key_stuff_delref, as s->pks is
+		 * incomplete at this point and no additional data is
+		 * allocated */
+		pfree(s->pks);
 		/* finally free s */
 		pfree(s);
 	} else if (flushline(flp, "expected record boundary in key")) {
@@ -1063,6 +1067,8 @@ static void process_secret(struct file_lex_position *flp,
 		add_secret(psecrets, s, "process_secret");
 	}
 }
+
+static void free_private_key_stuff(void *obj, where_t where UNUSED);
 
 static void process_secret_records(struct file_lex_position *flp,
 				   struct secret **psecrets)
@@ -1134,9 +1140,10 @@ static void process_secret_records(struct file_lex_position *flp,
 			struct secret *s = alloc_thing(struct secret, "secret");
 
 			s->ids = NULL;
-			s->pks.kind = PKK_PSK;	/* default */
-			s->pks.u.preshared_secret = EMPTY_CHUNK;
-			s->pks.line = flp->lino;
+			s->pks = refcnt_alloc(struct private_key_stuff, free_private_key_stuff, HERE);
+			s->pks->kind = PKK_PSK;	/* default */
+			s->pks->u.preshared_secret = EMPTY_CHUNK;
+			s->pks->line = flp->lino;
 			s->next = NULL;
 
 			for (;;) {
@@ -1185,7 +1192,7 @@ static void process_secret_records(struct file_lex_position *flp,
 					s->ids = i;
 					id_buf b;
 					dbg("id type added to secret(%p) %s: %s",
-					    s, enum_name(&pkk_names, s->pks.kind),
+					    s, enum_name(&pkk_names, s->pks->kind),
 					    str_id(&id, &b));
 				}
 				if (!shift(flp)) {
@@ -1193,6 +1200,11 @@ static void process_secret_records(struct file_lex_position *flp,
 					llog(RC_LOG_SERIOUS, flp->logger,
 						    "\"%s\" line %d: unexpected end of id list",
 						    flp->filename, flp->lino);
+					/* no need to use
+					 * private_key_stuff_delref, as s->pks
+					 * is incomplete at this point and no
+					 * additional data is allocated */
+					pfree(s->pks);
 					pfree(s);
 					break;
 				}
@@ -1273,25 +1285,7 @@ void lsw_free_preshared_secrets(struct secret **psecrets, struct logger *logger)
 				free_id_content(&i->id);
 				pfree(i);
 			}
-			switch (s->pks.kind) {
-			case PKK_PSK:
-				pfree(s->pks.u.preshared_secret.ptr);
-				break;
-			case PKK_PPK:
-				pfree(s->pks.ppk.ptr);
-				pfree(s->pks.ppk_id.ptr);
-				break;
-			case PKK_XAUTH:
-				pfree(s->pks.u.preshared_secret.ptr);
-				break;
-			case PKK_RSA:
-			case PKK_ECDSA:
-				/* Note: pub is all there is */
-				s->pks.pubkey_type->free_secret_content(&s->pks);
-				break;
-			default:
-				bad_case(s->pks.kind);
-			}
+			private_key_stuff_delref(&s->pks);
 			pfree(s);
 		}
 		*psecrets = NULL;
@@ -1503,28 +1497,64 @@ static const struct pubkey_type *private_key_type_nss(SECKEYPrivateKey *private_
 	}
 }
 
+struct private_key_stuff *private_key_stuff_addref_where(struct private_key_stuff *pks, const struct where *where)
+{
+	return addref_where(pks, where);
+}
+
+static void free_private_key_stuff(void *obj, where_t where UNUSED)
+{
+	struct private_key_stuff *pks = obj;
+	switch (pks->kind) {
+	case PKK_PSK:
+		pfree(pks->u.preshared_secret.ptr);
+		break;
+	case PKK_PPK:
+		pfree(pks->ppk.ptr);
+		pfree(pks->ppk_id.ptr);
+		break;
+	case PKK_XAUTH:
+		pfree(pks->u.preshared_secret.ptr);
+		break;
+	case PKK_RSA:
+	case PKK_ECDSA:
+		/* Note: pub is all there is */
+		pks->pubkey_type->free_secret_content(pks);
+		break;
+	default:
+		bad_case(pks->kind);
+	}
+	pfree(pks);
+}
+
+void private_key_stuff_delref_where(struct private_key_stuff **pks, const struct where *where)
+{
+	delref_where(pks, where);
+}
+
 static err_t add_private_key(struct secret **secrets, const struct private_key_stuff **pks,
 			     SECKEYPublicKey *pubk, SECItem *ckaid_nss,
 			     const struct pubkey_type *type, SECKEYPrivateKey *private_key)
 {
 	struct secret *s = alloc_thing(struct secret, "pubkey secret");
-	s->pks.pubkey_type = type;
-	s->pks.kind = type->private_key_kind;
-	s->pks.line = 0;
+	s->pks = refcnt_alloc(struct private_key_stuff, free_private_key_stuff, HERE);
+	s->pks->pubkey_type = type;
+	s->pks->kind = type->private_key_kind;
+	s->pks->line = 0;
 	/* make an unpacked copy of the private key */
-	s->pks.private_key = copy_private_key(private_key);
-	type->extract_private_key_pubkey_content(&s->pks, &s->pks.keyid, &s->pks.ckaid, &s->pks.size,
+	s->pks->private_key = copy_private_key(private_key);
+	type->extract_private_key_pubkey_content(s->pks, &s->pks->keyid, &s->pks->ckaid, &s->pks->size,
 						 pubk, ckaid_nss);
 
-	err_t err = type->secret_sane(&s->pks);
+	err_t err = type->secret_sane(s->pks);
 	if (err != NULL) {
-		type->free_secret_content(&s->pks);
+		private_key_stuff_delref(&s->pks);
 		pfree(s);
 		return err;
 	}
 
 	add_secret(secrets, s, "lsw_add_rsa_secret");
-	*pks = &s->pks;
+	*pks = s->pks;
 	return NULL;
 }
 
@@ -1559,7 +1589,7 @@ static err_t find_or_load_private_key_by_cert_2(struct secret **secrets, CERTCer
 	struct secret *s = find_secret_by_pubkey_ckaid_1(*secrets, type, ckaid_nss);
 	if (s != NULL) {
 		dbg("secrets entry for certificate already exists: %s", cert->nickname);
-		*pks = &s->pks;
+		*pks = s->pks;
 		*load_needed = false;
 		return NULL;
 	}
@@ -1648,7 +1678,7 @@ err_t find_or_load_private_key_by_ckaid(struct secret **secrets, const ckaid_t *
 	struct secret *s = find_secret_by_pubkey_ckaid_1(*secrets, NULL, &ckaid_nss);
 	if (s != NULL) {
 		dbg("secrets entry for ckaid already exists");
-		*pks = &s->pks;
+		*pks = s->pks;
 		*load_needed = false;
 		return NULL;
 	}

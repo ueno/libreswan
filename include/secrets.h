@@ -76,6 +76,7 @@ err_t unpack_ECDSA_public_key(struct ECDSA_public_key *ecdsa,
 			      const chunk_t *pubkey);
 
 struct private_key_stuff {
+	refcnt_t refcnt;	/* reference counted! */
 	enum PrivateKeyKind kind;
 	/*
 	 * This replaced "int lsw_secretlineno()", which assumes only
@@ -111,6 +112,12 @@ struct private_key_stuff {
 	 */
 	ckaid_t ckaid;
 };
+
+struct private_key_stuff *private_key_stuff_addref_where(struct private_key_stuff *pks, const struct where *where);
+void private_key_stuff_delref_where(struct private_key_stuff **pks, const struct where *where);
+
+#define private_key_stuff_addref(PKS) private_key_stuff_addref_where(PKS, HERE)
+#define private_key_stuff_delref(PKS) private_key_stuff_delref_where(PKS, HERE)
 
 extern struct private_key_stuff *lsw_get_pks(struct secret *s);
 extern struct id_list *lsw_get_idlist(const struct secret *s);
