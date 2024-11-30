@@ -59,6 +59,7 @@ struct task {
 	chunk_t nonce;
 	struct dh_local_secret *local_secret;
 	ke_and_nonce_cb *cb;
+	bool detach_whack;
 };
 
 static void compute_ke_and_nonce(struct logger *logger,
@@ -92,6 +93,9 @@ static stf_status complete_ke_and_nonce(struct state *st,
 	stf_status status = task->cb(st, md,
 				     task->local_secret,
 				     &task->nonce);
+	if (task->detach_whack) {
+		release_any_whack(st, HERE, "complete_ke_and_nonce finished");
+	}
 	return status;
 }
 
@@ -105,9 +109,17 @@ static const struct task_handler ke_and_nonce_handler = {
 void submit_ke_and_nonce(struct state *st, const struct dh_desc *dh,
 			 ke_and_nonce_cb *cb, const char *name)
 {
+	submit_ke_and_nonce_detach_whack(st, dh, cb, name, false);
+}
+
+void submit_ke_and_nonce_detach_whack(struct state *st, const struct dh_desc *dh,
+				      ke_and_nonce_cb *cb, const char *name,
+				      bool detach_whack)
+{
 	struct task *task = alloc_thing(struct task, "dh");
 	task->dh = dh;
 	task->cb = cb;
+	task->detach_whack = detach_whack;
 	submit_task(st->st_logger, st, task, &ke_and_nonce_handler, name);
 }
 

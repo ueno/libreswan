@@ -324,7 +324,8 @@ void unpend(struct ike_sa *ike, struct connection *cc)
 				} else if (!already_has_larval_v2_child(ike, p->connection)) {
 					submit_v2_CREATE_CHILD_SA_new_child(ike, p->connection,
 									    p->policy, p->try,
-									    p->whack_sock);
+									    p->whack_sock,
+									    /*background*/false);
 				}
 				break;
 			case IKEv1:

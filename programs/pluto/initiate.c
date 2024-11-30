@@ -367,7 +367,8 @@ void ipsecdoi_initiate(struct connection *c,
 				cc = c;
 			}
 			submit_v2_CREATE_CHILD_SA_new_child(ike, cc, policy, try,
-							    logger->global_whackfd);
+							    logger->global_whackfd,
+							    background);
 		}
 		break;
 	}

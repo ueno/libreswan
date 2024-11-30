@@ -556,7 +556,8 @@ stf_status process_v2_CREATE_CHILD_SA_rekey_child_response(struct ike_sa *ike,
 void submit_v2_CREATE_CHILD_SA_new_child(struct ike_sa *ike,
 					 struct connection *c, /* for child */
 					 lset_t policy, int try,
-					 struct fd *whackfd)
+					 struct fd *whackfd,
+					 bool background)
 {
 	struct child_sa *larval_child = new_v2_child_state(c, ike, IPSEC_SA,
 							   SA_INITIATOR,
@@ -567,9 +568,11 @@ void submit_v2_CREATE_CHILD_SA_new_child(struct ike_sa *ike,
 	free_chunk_content(&larval_child->sa.st_nr); /* this is from the parent. */
 	larval_child->sa.st_try = try;
 
-	/* share the love; XXX: something better? */
-	fd_delref(&ike->sa.st_logger->object_whackfd);
-	ike->sa.st_logger->object_whackfd = fd_addref(whackfd);
+	if (!background) {
+		/* share the love; XXX: something better? */
+		fd_delref(&ike->sa.st_logger->object_whackfd);
+		ike->sa.st_logger->object_whackfd = fd_addref(whackfd);
+	}
 	larval_child->sa.st_policy = policy;
 
 	llog_sa(RC_LOG, larval_child,
@@ -587,9 +590,10 @@ void submit_v2_CREATE_CHILD_SA_new_child(struct ike_sa *ike,
 	    str_policy(policy, &pb),
 	    larval_child->sa.st_pfs_group == NULL ? "no-pfs" : larval_child->sa.st_pfs_group->common.fqn);
 
-	submit_ke_and_nonce(&larval_child->sa, larval_child->sa.st_pfs_group /*possibly-null*/,
-			    queue_v2_CREATE_CHILD_SA_initiator,
-			    "Child Initiator KE? and nonce");
+	submit_ke_and_nonce_detach_whack(&larval_child->sa, larval_child->sa.st_pfs_group /*possibly-null*/,
+					 queue_v2_CREATE_CHILD_SA_initiator,
+					 "Child Initiator KE? and nonce",
+					 background);
 }
 
 stf_status initiate_v2_CREATE_CHILD_SA_new_child_request(struct ike_sa *ike,
