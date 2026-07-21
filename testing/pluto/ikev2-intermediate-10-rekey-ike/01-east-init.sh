@@ -5,5 +5,6 @@
 
 ipsec start
 ../../guestbin/wait-until-pluto-started
+ipsec whack --impair followup_ke_link_length:7
 ipsec auto --add east
 echo "initdone"
