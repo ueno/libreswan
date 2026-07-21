@@ -185,8 +185,15 @@ static bool validate_ikev2_followup_ke_link(struct state *st,
 void generate_ikev2_followup_ke_link(struct state *st)
 {
 	free_chunk_content(&st->st_v2_ike_followup_ke.link);
+	size_t len = DEFAULT_ADDKE_LINK_SIZE;
+	if (impair.followup_ke_link_length.enabled) {
+		llog(IMPAIR_STREAM, st->logger,
+		     "changing followup-ke link length from %zu to %u",
+		     len, impair.followup_ke_link_length.value);
+		len = impair.followup_ke_link_length.value;
+	}
 	st->st_v2_ike_followup_ke.link =
-		alloc_rnd_chunk(DEFAULT_ADDKE_LINK_SIZE, "followup-ke link");
+		alloc_rnd_chunk(len, "followup-ke link");
 }
 
 /*

@@ -398,6 +398,8 @@ struct impairment impairments[] = {
 
 	B(mangle_cert_pubkey, "mangle the pubkey part of the certificate payload (currently assumes RSA)"),
 
+	U(followup_ke_link_length, "length of link value in an ADDITIONAL_KEY_EXCHANGE notification"),
+
 #undef U
 #undef B
 #undef V

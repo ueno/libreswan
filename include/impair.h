@@ -213,6 +213,8 @@ struct impair {
 
 	bool mangle_cert_pubkey;
 
+	struct impair_unsigned followup_ke_link_length;
+
 	/*
 	 * add more here
 	 */
