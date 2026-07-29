@@ -7,7 +7,7 @@ ipsec start
 
 ipsec whack --impair revival
 
-ipsec whack --impair omit_addke_notification:1
+ipsec whack --impair omit_addke_notification:4
 
 ipsec add west-cuckold
 ipsec add west-cuckoo
