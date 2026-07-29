@@ -344,10 +344,6 @@ stf_status process_v2_IKE_FOLLOWUP_KE_rekey_ike_request(struct ike_sa *ike,
 		return STF_INTERNAL_ERROR;
 	}
 
-	if (!PEXPECT(larval_ike->sa.logger, next_ikev2_ike_followup_ke_exchange(larval_ike))) {
-		return STF_INTERNAL_ERROR;
-	}
-
 	if (!validate_ikev2_followup_ke_link(larval_ike, md)) {
 		llog(RC_LOG, larval_ike->sa.logger, "responder IKE_FOLLOWUP_KE link does not match");
 		LDBG_hunk(larval_ike->sa.logger, &larval_ike->sa.st_v2_ike_followup_ke.link);
