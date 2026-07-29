@@ -198,10 +198,14 @@ bool emit_v2N_ADDITIONAL_KEY_EXCHANGE(struct child_sa *child,
 				      struct pbs_out *outs)
 {
 	struct state *st = &child->sa;
+	unsigned next_exchange = st->st_v2_ike_followup_ke.next_exchange;
+
 	if (impair.omit_addke_notification.enabled &&
-	    impair.omit_addke_notification.value == st->st_v2_ike_followup_ke.next_exchange) {
+	    PEXPECT(st->logger, next_exchange > 0) &&
+	    impair.omit_addke_notification.value == (st->st_oakley.ta_addke.list[next_exchange - 1].type - IKEv2_TRANS_TYPE_ADDKE1) + 1) {
 		llog(IMPAIR_STREAM, st->logger,
-		     "omitting ADDITIONAL_KEY_EXCHANGE notification");
+		     "omitting ADDITIONAL_KEY_EXCHANGE notification for addke%u",
+		     impair.omit_addke_notification.value);
 		return true;
 	}
 	return emit_v2N_hunk(v2N_ADDITIONAL_KEY_EXCHANGE,

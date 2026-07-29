@@ -398,7 +398,7 @@ struct impairment impairments[] = {
 
 	B(mangle_cert_pubkey, "mangle the pubkey part of the certificate payload (currently assumes RSA)"),
 
-	U(omit_addke_notification, "omit an ADDITIONAL_KEY_EXCHANGE notification in the IKE_FOLLOWUP_KE exchange"),
+	U(omit_addke_notification, "omit an ADDITIONAL_KEY_EXCHANGE notification in the IKE_FOLLOWUP_KE exchange for addkeN"),
 
 #undef U
 #undef B
