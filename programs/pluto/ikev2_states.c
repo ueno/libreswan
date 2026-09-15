@@ -232,7 +232,7 @@ V2_LARVAL_SA(REKEY_CHILD_I0, "STATE_V2_REKEY_CHILD_I0",
 
 static const struct v2_transition v2_REKEY_CHILD_R0_transition = {
 	.story      = "process CREATE_CHILD_SA rekey Child SA request (larval)",
-	.to = &state_v2_ESTABLISHED_CHILD_SA,
+	.to = &state_v2_REKEY_CHILD_FOLLOWUP_KE_R0,
 	.exchange = &v2_CREATE_CHILD_SA_rekey_child_exchange,
 };
 
@@ -241,13 +241,39 @@ V2_LARVAL_SA(REKEY_CHILD_R0, "STATE_V2_REKEY_CHILD_R0",
 
 static const struct v2_transition v2_REKEY_CHILD_I1_transition = {
 	.story      = "process CREATE_CHILD_SA rekey Child SA response (larval)",
-	.to = &state_v2_ESTABLISHED_CHILD_SA,
-	.flags = { .release_whack = true, },
+	.to = &state_v2_REKEY_CHILD_FOLLOWUP_KE_I0,
 	.exchange = &v2_CREATE_CHILD_SA_rekey_child_exchange,
 };
 
 V2_LARVAL_SA(REKEY_CHILD_I1, "sent CREATE_CHILD_SA request to rekey IPsec SA",
 	     CAT_OPEN_CHILD_SA);
+
+static const struct v2_transition v2_REKEY_CHILD_FOLLOWUP_KE_R0_transition = {
+	.story      = "process IKE_FOLLOWUP_KE rekey Child SA request (larval)",
+	.to = &state_v2_ESTABLISHED_IKE_SA,
+	.exchange = &v2_IKE_FOLLOWUP_KE_rekey_child_exchange,
+};
+
+V2_LARVAL_SA(REKEY_CHILD_FOLLOWUP_KE_R0, "process IKE_FOLLOWUP_KE rekey Child SA request (larval)",
+             CAT_OPEN_IKE_SA);
+
+static const struct v2_transition v2_REKEY_CHILD_FOLLOWUP_KE_I0_transition = {
+	.story      = "initiate IKE_FOLLOWUP_KE rekey Child SA (larval)",
+	.to = &state_v2_REKEY_CHILD_FOLLOWUP_KE_I1,
+	.exchange = &v2_IKE_FOLLOWUP_KE_rekey_child_exchange,
+};
+
+V2_LARVAL_SA(REKEY_CHILD_FOLLOWUP_KE_I0, "STATE_V2_REKEY_CHILD_FOLLOWUP_KE_I0",
+             CAT_OPEN_CHILD_SA);
+
+static const struct v2_transition v2_REKEY_CHILD_FOLLOWUP_KE_I1_transition = {
+	.story      = "process IKE_FOLLOWUP_KE rekey Child SA response (larval)",
+	.to = &state_v2_ESTABLISHED_IKE_SA,
+	.exchange = &v2_IKE_FOLLOWUP_KE_rekey_child_exchange,
+};
+
+V2_LARVAL_SA(REKEY_CHILD_FOLLOWUP_KE_I1, "sent IKE_FOLLOWUP_KE request to rekey Child SA",
+             CAT_OPEN_IKE_SA);
 
 /*
  * Child states when creating a new Child SA using CREATE_CHILD_SA.
@@ -304,7 +330,8 @@ V2_STATE(ESTABLISHED_IKE_SA, "established IKE SA",
 	 &v2_CREATE_CHILD_SA_rekey_ike_exchange,
 	 &v2_CREATE_CHILD_SA_rekey_child_exchange,
 	 &v2_CREATE_CHILD_SA_new_child_exchange,
-	 &v2_IKE_FOLLOWUP_KE_rekey_ike_exchange);
+	 &v2_IKE_FOLLOWUP_KE_rekey_ike_exchange,
+	 &v2_IKE_FOLLOWUP_KE_rekey_child_exchange);
 
 V2_STATE(ESTABLISHED_CHILD_SA, "established Child SA",
 	 CAT_ESTABLISHED_CHILD_SA, /*secured*/true);
@@ -343,6 +370,9 @@ static const struct finite_state *v2_states[] = {
 	S(REKEY_IKE_I0),
 	S(REKEY_IKE_I1),
 	S(REKEY_IKE_R0),
+	S(REKEY_CHILD_FOLLOWUP_KE_I0),
+	S(REKEY_CHILD_FOLLOWUP_KE_I1),
+	S(REKEY_CHILD_FOLLOWUP_KE_R0),
 	S(REKEY_IKE_FOLLOWUP_KE_I0),
 	S(REKEY_IKE_FOLLOWUP_KE_I1),
 	S(REKEY_IKE_FOLLOWUP_KE_R0),

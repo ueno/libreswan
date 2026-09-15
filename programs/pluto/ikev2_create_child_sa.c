@@ -1359,6 +1359,28 @@ stf_status process_v2_CREATE_CHILD_SA_request_continue_3(struct ike_sa *ike,
 	ldbg(larval_child->sa.logger, "%s() for "PRI_SO" %s",
 	     __func__, pri_so(larval_child->sa.st_serialno), larval_child->sa.st_state->name);
 
+	/* REKEY_CHILD_R0 -> REKEY_CHILD_FOLLOWUP_KE_R0 */
+	set_larval_v2_transition(larval_child, &state_v2_REKEY_CHILD_FOLLOWUP_KE_R0, HERE);
+	change_v2_state(&larval_ike->sa);
+
+	if (next_is_ikev2_ike_followup_ke_exchange(larval_child)) {
+		if (!PEXPECT(larval_child->sa.logger, next_ikev2_ike_followup_ke_exchange(larval_ike))) {
+			return STF_INTERNAL_ERROR;
+		}
+
+		if (!record_v2_rekey_ike_message(ike, larval_ike, /*responder*/request_md)) {
+			return STF_INTERNAL_ERROR;
+		}
+
+		larval_ike->sa.st_v2_ike_followup_ke.keys =
+			table_alloc(struct prf_keys, 0);
+
+		ike->sa.st_v2_ike_followup_ke.larval_sa =
+			ike->sa.st_v2_msgid_windows.responder.wip_sa;
+		ike->sa.st_v2_msgid_windows.responder.wip_sa = NULL;
+		return STF_OK;
+	}
+
 	/*
 	 * CREATE_CHILD_SA request and response are small 300 - 750 bytes.
 	 * ??? Should we support fragmenting?  Maybe one day.

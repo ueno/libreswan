@@ -117,6 +117,7 @@ void ikev2_derive_child_keys(struct ike_sa *ike, struct child_sa *child)
 						   shared,
 						   child->sa.st_ni,
 						   child->sa.st_nr,
+						   child->sa.st_v2_ike_followup_ke.prf_keys,
 						   keymat_len * 2,
 						   child->sa.logger);
 	PK11SymKey *ikey = key_from_symkey_bytes("initiator to responder key",
