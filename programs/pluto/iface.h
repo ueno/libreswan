@@ -164,9 +164,9 @@ struct iface_endpoint {
 	bool iketcp_server;
 	enum iketcp_state {
 		IKETCP_ACCEPTED = 1,
-		IKETCP_PREFIX_RECEIVED, /* received IKETCP */
-		IKETCP_ENABLED, /* received at least one packet */
-		IKETCP_STOPPED, /* waiting on state to close */
+		IKETCP_PREFIX_RECEIVED, /* responder received IKETCP */
+		IKETCP_ENABLED, /* responder received at least one packet */
+		IKETCP_INITIATOR,
 	} iketcp_state;
 };
 
