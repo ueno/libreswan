@@ -556,7 +556,13 @@ stf_status process_v2_IKE_AUTH_request_EAP_continue(struct ike_sa *ike,
 	struct logger *logger = ike->sa.st_logger;
 	diag_t d;
 
-	pexpect(eap != NULL);
+	if (!pexpect(eap != NULL)) {
+		record_v2N_response(ike->sa.st_logger, ike, md,
+				    v2N_AUTHENTICATION_FAILED, NULL/*no-data*/,
+				    ENCRYPTED_PAYLOAD);
+		llog_sa(RC_LOG, ike, "EAP not set");
+		return STF_FATAL;
+	}
 
 	struct pbs_in pbs = md->chain[ISAKMP_NEXT_v2EAP]->pbs;
 	struct pbs_in data;
@@ -633,7 +639,13 @@ stf_status process_v2_IKE_AUTH_request_EAP_final(struct ike_sa *ike,
 	struct msg_digest *sa_md = ike->sa.st_eap_sa_md;
 	struct logger *logger = ike->sa.st_logger;
 
-	pexpect(eap != NULL);
+	if (!pexpect(eap != NULL)) {
+		llog_sa(RC_LOG, ike, "EAP not set");
+		record_v2N_response(ike->sa.st_logger, ike, md,
+				    v2N_AUTHENTICATION_FAILED, NULL/*no-data*/,
+				    ENCRYPTED_PAYLOAD);
+		return STF_FATAL;
+	}
 	pexpect(sa_md != NULL);
 
 	if (!eap->eap_established)
